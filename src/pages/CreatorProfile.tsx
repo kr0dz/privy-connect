@@ -3,8 +3,9 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Star, Eye, Lock, MessageCircle, Crown, Heart, Image, Video, Headphones } from "lucide-react";
+import { Star, Eye, Lock, MessageCircle, Crown, Heart, Image, Video, Headphones, Users, Clock, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { useModals } from "@/contexts/ModalContext";
 
 const tiers = [
   { name: "Basic", price: "$9.99/mo", features: ["Access to public content", "Like & comment", "Basic feed"] },
@@ -13,12 +14,12 @@ const tiers = [
 ];
 
 const mockContent = [
-  { id: 1, type: "image", locked: false, label: "Behind the scenes" },
-  { id: 2, type: "video", locked: true, label: "Exclusive session" },
-  { id: 3, type: "image", locked: false, label: "Morning vibes" },
-  { id: 4, type: "audio", locked: true, label: "Personal voice note" },
-  { id: 5, type: "image", locked: true, label: "Premium drop" },
-  { id: 6, type: "video", locked: false, label: "Q&A Highlights" },
+  { id: 1, type: "image", locked: false, label: "Behind the scenes", unlocks: 34 },
+  { id: 2, type: "video", locked: true, label: "Exclusive session", price: "$5", unlocks: 12, limited: true },
+  { id: 3, type: "image", locked: false, label: "Morning vibes", unlocks: 67 },
+  { id: 4, type: "audio", locked: true, label: "Personal voice note", price: "$3", unlocks: 8 },
+  { id: 5, type: "image", locked: true, label: "Premium drop", price: "$7", unlocks: 5, limited: true },
+  { id: 6, type: "video", locked: false, label: "Q&A Highlights", unlocks: 45 },
 ];
 
 const typeIcon = {
@@ -30,6 +31,7 @@ const typeIcon = {
 const CreatorProfile = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState<"content" | "about">("content");
+  const { openUnlock, openChat } = useModals();
 
   return (
     <div className="min-h-screen bg-background">
@@ -63,9 +65,15 @@ const CreatorProfile = () => {
               </div>
             </div>
             <div className="flex gap-3">
-              <Button variant="gold" className="gap-2">
-                <MessageCircle className="w-4 h-4" /> Message
-              </Button>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button
+                  variant="gold"
+                  className="gap-2 glow-gold"
+                  onClick={() => openChat({ creatorName: "Luna Noir", creatorInitial: "L" })}
+                >
+                  <MessageCircle className="w-4 h-4" /> Start Private Chat
+                </Button>
+              </motion.div>
               <Button variant="gold-outline">
                 <Heart className="w-4 h-4" />
               </Button>
@@ -99,15 +107,33 @@ const CreatorProfile = () => {
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: i * 0.05 }}
-                        className="aspect-square rounded-xl bg-gradient-card border border-border/50 relative overflow-hidden group cursor-pointer hover:border-primary/20 transition-colors"
+                        whileHover={{ scale: 1.02 }}
+                        onClick={() => {
+                          if (item.locked) {
+                            openUnlock({
+                              title: item.label,
+                              price: item.price || "$5",
+                              description: item.limited ? "Only 10 users can unlock this" : undefined,
+                            });
+                          }
+                        }}
+                        className="aspect-square rounded-xl bg-gradient-card border border-border/50 relative overflow-hidden group cursor-pointer hover:border-primary/20 transition-all"
                       >
                         <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
                           {typeIcon[item.type as keyof typeof typeIcon]}
                         </div>
                         {item.locked && (
-                          <div className="absolute inset-0 bg-background/60 backdrop-blur-md flex flex-col items-center justify-center gap-2">
+                          <div className="absolute inset-0 bg-background/60 backdrop-blur-lg flex flex-col items-center justify-center gap-1.5">
                             <Lock className="w-6 h-6 text-primary" />
-                            <span className="text-xs text-primary font-medium">Unlock</span>
+                            <span className="text-xs text-primary font-semibold">{item.price}</span>
+                            {item.limited && (
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> Limited time
+                              </span>
+                            )}
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                              <Users className="w-3 h-3" /> {item.unlocks} unlocked
+                            </span>
                           </div>
                         )}
                         <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-background/80 to-transparent">
@@ -120,18 +146,21 @@ const CreatorProfile = () => {
 
                 {/* Subscription tiers */}
                 <div className="space-y-4">
-                  <h3 className="font-display text-lg font-semibold text-foreground">Subscribe</h3>
+                  <h3 className="font-display text-lg font-semibold text-foreground">Get Access</h3>
                   {tiers.map((tier) => (
-                    <div
+                    <motion.div
                       key={tier.name}
-                      className={`rounded-xl p-5 border transition-colors ${
+                      whileHover={{ scale: 1.02 }}
+                      className={`rounded-xl p-5 border transition-colors cursor-pointer ${
                         tier.popular
                           ? "border-primary/40 bg-primary/5 glow-gold"
                           : "border-border/50 bg-gradient-card"
                       }`}
                     >
                       {tier.popular && (
-                        <span className="text-xs font-medium text-primary mb-2 block">Most Popular</span>
+                        <span className="text-xs font-medium text-primary mb-2 flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" /> Most Popular
+                        </span>
                       )}
                       <div className="flex items-baseline justify-between mb-3">
                         <h4 className="font-display font-semibold text-foreground">{tier.name}</h4>
@@ -148,10 +177,11 @@ const CreatorProfile = () => {
                         variant={tier.popular ? "gold" : "gold-outline"}
                         size="sm"
                         className="w-full"
+                        onClick={() => openUnlock({ title: `${tier.name} Access`, price: tier.price, description: `Full ${tier.name} tier access to Luna Noir` })}
                       >
-                        Subscribe
+                        Get Access
                       </Button>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
               </div>
@@ -160,8 +190,8 @@ const CreatorProfile = () => {
             {activeTab === "about" && (
               <div className="max-w-2xl">
                 <p className="text-muted-foreground leading-relaxed">
-                  Welcome to my exclusive space. I create premium lifestyle and art content 
-                  that you won't find anywhere else. Subscribe to get closer, unlock exclusive 
+                  Welcome to my exclusive space. I create premium lifestyle and art content
+                  that you won't find anywhere else. Subscribe to get closer, unlock exclusive
                   experiences, and become part of my inner circle.
                 </p>
                 <div className="mt-6 grid grid-cols-2 gap-4">
