@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
+import { Lock, ArrowRight } from "lucide-react";
 
 const CTASection = () => (
   <section id="creators" className="py-24">
@@ -19,12 +20,16 @@ const CTASection = () => (
             Join thousands of creators earning on their own terms. Set your price. Own your audience.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button variant="gold" size="lg" asChild>
-              <Link to="/signup">Start as Creator</Link>
-            </Button>
-            <Button variant="gold-outline" size="lg" asChild>
-              <Link to="/discover">Explore Creators</Link>
-            </Button>
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+              <Button variant="gold" size="lg" className="glow-gold" asChild>
+                <Link to="/signup">Start as Creator <ArrowRight className="w-4 h-4 ml-1" /></Link>
+              </Button>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+              <Button variant="gold-outline" size="lg" asChild>
+                <Link to="/discover"><Lock className="w-4 h-4 mr-1" /> Unlock Creators</Link>
+              </Button>
+            </motion.div>
           </div>
         </div>
       </motion.div>
