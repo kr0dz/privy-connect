@@ -5,6 +5,7 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import EditDraftModal from '@/components/modals/EditDraftModal';
 import { supabase } from '@/lib/supabase';
 import { authService, type UserRole } from '@/services/auth/authService';
 
@@ -179,21 +180,22 @@ const Dashboard = () => {
     setEditingValue(draft.content);
   };
 
-  const saveDraftEdit = async () => {
-    if (!editingDraftId) {
-      return;
-    }
-
+  const saveDraftEdit = async (draftId: string, newContent: string) => {
     await supabase
       .from('messages')
-      .update({ content: editingValue })
-      .eq('id', editingDraftId);
+      .update({ content: newContent })
+      .eq('id', draftId);
 
     setEditingDraftId(null);
     setEditingValue('');
     if (creatorId) {
       await loadDashboardData(creatorId);
     }
+  };
+
+  const cancelEditDraft = () => {
+    setEditingDraftId(null);
+    setEditingValue('');
   };
 
   const rejectDraft = async (draftId: string) => {
@@ -224,62 +226,70 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-background via-background to-background/80">
       <Header />
       <main className="container py-24 space-y-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <p className="text-sm uppercase tracking-wide text-primary">Creator Analytics</p>
-            <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground">Dashboard del creador</h1>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          <div className="space-y-2">
+            <p className="text-sm uppercase tracking-widest font-semibold text-primary/80">Creator Analytics</p>
+            <h1 className="font-display text-4xl md:text-5xl font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
+              Dashboard del creador
+            </h1>
+            <p className="text-muted-foreground text-sm max-w-lg">
+              Administra tus respuestas IA, revisa analytics en tiempo real y optimiza tus ganancias
+            </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Button asChild variant="outline">
-              <Link to="/creator/settings">Configurar gemelo</Link>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button asChild variant="outline" size="sm">
+              <Link to="/creator/settings">⚙️ Configurar gemelo</Link>
             </Button>
-            <Button variant="outline" onClick={() => void handleSignOut()} disabled={isSigningOut}>
+            <Button variant="outline" size="sm" onClick={() => void handleSignOut()} disabled={isSigningOut}>
               {isSigningOut ? 'Cerrando sesion...' : 'Cerrar sesion'}
             </Button>
           </div>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <Card className="bg-surface-glass border-primary/20">
-            <CardHeader>
-              <CardTitle>Ingresos totales</CardTitle>
-              <CardDescription>Periodo actual</CardDescription>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Card className="bg-gradient-to-br from-primary/10 via-surface-glass to-surface-glass border-primary/20 shadow-lg hover:shadow-xl transition-shadow">
+            <CardHeader className="pb-2">
+              <CardDescription className="text-xs uppercase tracking-wider">Ingresos totales</CardDescription>
+              <CardTitle className="text-2xl">Periodo actual</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">${totals.total.toFixed(2)}</p>
+              <p className="text-4xl font-bold text-primary">${totals.total.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground mt-2">{earningsByDay.length} dias registrados</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-surface-glass border-primary/20">
-            <CardHeader>
-              <CardTitle>Ultimos 7 dias</CardTitle>
-              <CardDescription>Momentum semanal</CardDescription>
+          <Card className="bg-gradient-to-br from-blue-500/10 via-surface-glass to-surface-glass border-blue-500/20 shadow-lg hover:shadow-xl transition-shadow">
+            <CardHeader className="pb-2">
+              <CardDescription className="text-xs uppercase tracking-wider">Ultimos 7 dias</CardDescription>
+              <CardTitle className="text-2xl">Momentum</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">${totals.last7.toFixed(2)}</p>
+              <p className="text-4xl font-bold text-blue-400">${totals.last7.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground mt-2">Semana actual</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-surface-glass border-primary/20">
-            <CardHeader>
-              <CardTitle>Engagement</CardTitle>
-              <CardDescription>Conversion sobre mensajes</CardDescription>
+          <Card className="bg-gradient-to-br from-emerald-500/10 via-surface-glass to-surface-glass border-emerald-500/20 shadow-lg hover:shadow-xl transition-shadow">
+            <CardHeader className="pb-2">
+              <CardDescription className="text-xs uppercase tracking-wider">Engagement</CardDescription>
+              <CardTitle className="text-2xl">Conversion</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">{engagementRate.toFixed(1)}%</p>
+              <p className="text-4xl font-bold text-emerald-400">{engagementRate.toFixed(1)}%</p>
+              <p className="text-xs text-muted-foreground mt-2">Tasa de respuesta</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-surface-glass border-primary/20">
-            <CardHeader>
-              <CardTitle>Mejor dia</CardTitle>
-              <CardDescription>Pico de ingresos</CardDescription>
+          <Card className="bg-gradient-to-br from-amber-500/10 via-surface-glass to-surface-glass border-amber-500/20 shadow-lg hover:shadow-xl transition-shadow">
+            <CardHeader className="pb-2">
+              <CardDescription className="text-xs uppercase tracking-wider">Mejor dia</CardDescription>
+              <CardTitle className="text-2xl">Pico</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">${totals.topDay.earnings.toFixed(2)}</p>
+              <p className="text-4xl font-bold text-amber-400">${totals.topDay.earnings.toFixed(2)}</p>
               <p className="text-xs text-muted-foreground mt-2">{totals.topDay.day}</p>
             </CardContent>
           </Card>
@@ -298,7 +308,7 @@ const Dashboard = () => {
                   <XAxis dataKey="day" hide />
                   <YAxis stroke="hsl(var(--muted-foreground))" />
                   <Tooltip />
-                  <Line type="monotone" dataKey="earnings" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="earnings" stroke="hsl(var(--primary))" strokeWidth={3} dot={false} isAnimationActive />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
@@ -316,7 +326,7 @@ const Dashboard = () => {
                   <XAxis dataKey="content_type" stroke="hsl(var(--muted-foreground))" />
                   <YAxis stroke="hsl(var(--muted-foreground))" />
                   <Tooltip />
-                  <Bar dataKey="total" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="total" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} isAnimationActive />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -385,22 +395,13 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {editingDraftId ? (
-          <div className="fixed inset-0 z-[110] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-xl rounded-xl border border-primary/20 bg-surface-glass p-4">
-              <h3 className="font-display text-xl text-foreground mb-2">Editar borrador</h3>
-              <textarea
-                className="w-full min-h-40 rounded-lg bg-secondary border border-border p-3 text-sm"
-                value={editingValue}
-                onChange={(e) => setEditingValue(e.target.value)}
-              />
-              <div className="flex items-center justify-end gap-2 mt-3">
-                <Button variant="outline" onClick={() => setEditingDraftId(null)}>Cancelar</Button>
-                <Button variant="gold" onClick={() => void saveDraftEdit()}>Guardar</Button>
-              </div>
-            </div>
-          </div>
-        ) : null}
+        <EditDraftModal
+          isOpen={!!editingDraftId}
+          draftId={editingDraftId || ''}
+          initialContent={editingValue}
+          onSave={saveDraftEdit}
+          onCancel={cancelEditDraft}
+        />
       </main>
       <Footer />
     </div>
