@@ -1,8 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Crown, Menu, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import NavUser from "@/components/NavUser";
+import { authService } from "@/services/auth/authService";
 
 const navItems = [
   { label: "Discover", path: "/discover" },
@@ -12,7 +14,25 @@ const navItems = [
 
 const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const location = useLocation();
+
+  useEffect(() => {
+    let mounted = true;
+    authService.getSession().then((session) => {
+      if (mounted) {
+        setIsAuthenticated(Boolean(session));
+      }
+    }).catch(() => {
+      if (mounted) {
+        setIsAuthenticated(false);
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-surface-glass border-b border-border/50">
@@ -38,12 +58,18 @@ const Header = () => {
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/login">Log In</Link>
-          </Button>
-          <Button variant="gold" size="sm" asChild>
-            <Link to="/signup">Get Started</Link>
-          </Button>
+          {isAuthenticated ? (
+            <NavUser />
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" asChild>
+                <Link to="/login">Log In</Link>
+              </Button>
+              <Button variant="gold" size="sm" asChild>
+                <Link to="/signup">Get Started</Link>
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Mobile toggle */}
@@ -75,14 +101,20 @@ const Header = () => {
                   {item.label}
                 </Link>
               ))}
-              <div className="flex gap-3 pt-2">
-                <Button variant="ghost" size="sm" className="flex-1" asChild>
-                  <Link to="/login">Log In</Link>
-                </Button>
-                <Button variant="gold" size="sm" className="flex-1" asChild>
-                  <Link to="/signup">Get Started</Link>
-                </Button>
-              </div>
+              {isAuthenticated ? (
+                <div className="pt-2">
+                  <NavUser />
+                </div>
+              ) : (
+                <div className="flex gap-3 pt-2">
+                  <Button variant="ghost" size="sm" className="flex-1" asChild>
+                    <Link to="/login">Log In</Link>
+                  </Button>
+                  <Button variant="gold" size="sm" className="flex-1" asChild>
+                    <Link to="/signup">Get Started</Link>
+                  </Button>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

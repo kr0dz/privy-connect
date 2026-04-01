@@ -2,6 +2,7 @@ import { FormEvent, useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import BackButton from '@/components/BackButton';
 import { Button } from '@/components/ui/button';
 import { authService, type UserRole } from '@/services/auth/authService';
 import { useCreatorTwin, type CreatorTwinForm } from '@/hooks/useCreatorTwin';
@@ -93,6 +94,9 @@ const CreatorSettings = () => {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container py-24">
+        <div className="max-w-3xl mx-auto mb-4">
+          <BackButton fallbackTo="/dashboard" />
+        </div>
         <div className="max-w-3xl mx-auto bg-surface-glass border border-primary/20 rounded-2xl p-6 md:p-8 shadow-elevated">
           <h1 className="font-display text-3xl font-bold text-foreground">Configuracion del gemelo digital</h1>
           <p className="text-sm text-muted-foreground mt-2 mb-6">

@@ -18,6 +18,7 @@ import FanDashboard from "./pages/FanDashboard.tsx";
 import CreatorDashboard from "./pages/CreatorDashboard.tsx";
 import AdminDashboard from "./pages/AdminDashboard.tsx";
 import CreatorSettings from "./pages/CreatorSettings.tsx";
+import ProfileSettings from "./pages/ProfileSettings.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ const App = () => {
               <Route path="/dashboard/fan" element={<ProtectedRoute><FanDashboard /></ProtectedRoute>} />
               <Route path="/dashboard/creator" element={<ProtectedRoute><CreatorDashboard /></ProtectedRoute>} />
               <Route path="/creator/settings" element={<ProtectedRoute requiredRole="creator"><CreatorSettings /></ProtectedRoute>} />
+              <Route path="/profile-settings" element={<ProtectedRoute><ProfileSettings /></ProtectedRoute>} />
               <Route path="/dashboard/admin" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>

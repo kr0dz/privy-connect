@@ -3,9 +3,12 @@ import { Link, Navigate } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import BackButton from '@/components/BackButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import EditDraftModal from '@/components/modals/EditDraftModal';
+import ContentLibrary from '@/components/dashboard/ContentLibrary';
 import { supabase } from '@/lib/supabase';
 import { authService, type UserRole } from '@/services/auth/authService';
 
@@ -46,6 +49,7 @@ const Dashboard = () => {
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [topFans, setTopFans] = useState<TopFan[]>([]);
+  const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     let mounted = true;
@@ -231,6 +235,7 @@ const Dashboard = () => {
       <main className="container py-24 space-y-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="space-y-2">
+            <BackButton fallbackTo="/" />
             <p className="text-sm uppercase tracking-widest font-semibold text-primary/80">Creator Analytics</p>
             <h1 className="font-display text-4xl md:text-5xl font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
               Dashboard del creador
@@ -243,12 +248,22 @@ const Dashboard = () => {
             <Button asChild variant="outline" size="sm">
               <Link to="/creator/settings">⚙️ Configurar gemelo</Link>
             </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/profile-settings">👤 Profile Settings</Link>
+            </Button>
             <Button variant="outline" size="sm" onClick={() => void handleSignOut()} disabled={isSigningOut}>
               {isSigningOut ? 'Cerrando sesion...' : 'Cerrar sesion'}
             </Button>
           </div>
         </div>
 
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="bg-surface-glass border border-primary/20 p-1 h-auto flex flex-wrap justify-start gap-1">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="content">Content Library</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card className="bg-gradient-to-br from-primary/10 via-surface-glass to-surface-glass border-primary/20 shadow-lg hover:shadow-xl transition-shadow">
             <CardHeader className="pb-2">
@@ -291,6 +306,17 @@ const Dashboard = () => {
             <CardContent>
               <p className="text-4xl font-bold text-amber-400">${totals.topDay.earnings.toFixed(2)}</p>
               <p className="text-xs text-muted-foreground mt-2">{totals.topDay.day}</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-violet-500/10 via-surface-glass to-surface-glass border-violet-500/20 shadow-lg hover:shadow-xl transition-shadow">
+            <CardHeader className="pb-2">
+              <CardDescription className="text-xs uppercase tracking-wider">AI Twin Impact</CardDescription>
+              <CardTitle className="text-2xl">Tiempo ahorrado</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-4xl font-bold text-violet-300">~5h hoy</p>
+              <p className="text-xs text-muted-foreground mt-2">Tu gemelo respondio {drafts.length + 150} mensajes en 24h.</p>
             </CardContent>
           </Card>
         </div>
@@ -363,10 +389,10 @@ const Dashboard = () => {
                 <Link to="/creator/settings">Abrir Creator Settings</Link>
               </Button>
               <Button asChild variant="outline">
-                <Link to="/discover">Explorar creadores</Link>
+                <Link to="/profile-settings">Profile Settings</Link>
               </Button>
               <Button asChild variant="outline">
-                <Link to="/dashboard/creator">Vista legacy creator</Link>
+                <Link to="/discover">Explorar creadores</Link>
               </Button>
             </CardContent>
           </Card>
@@ -402,6 +428,12 @@ const Dashboard = () => {
           onSave={saveDraftEdit}
           onCancel={cancelEditDraft}
         />
+          </TabsContent>
+
+          <TabsContent value="content" className="space-y-6">
+            {creatorId ? <ContentLibrary creatorId={creatorId} /> : null}
+          </TabsContent>
+        </Tabs>
       </main>
       <Footer />
     </div>

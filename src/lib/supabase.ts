@@ -21,9 +21,22 @@ export type Tables = {
     name: string;
     avatar_url: string;
     bio: string;
+    instagram_url: string | null;
+    twitter_url: string | null;
     subscription_tier: 'free' | 'premium' | 'vip';
     wallet_balance: number;
     onboarding_completed: boolean;
+    created_at: string;
+  };
+  creator_content: {
+    id: string;
+    creator_id: string;
+    type: 'image' | 'video' | 'audio';
+    url: string;
+    title: string;
+    description: string | null;
+    price: number;
+    scheduled_for: string | null;
     created_at: string;
   };
   messages: {
