@@ -69,7 +69,7 @@ const CreatorProfile = () => {
                 <Button
                   variant="gold"
                   className="gap-2 glow-gold"
-                  onClick={() => openChat({ creatorName: "Luna Noir", creatorInitial: "L" })}
+                  onClick={() => openChat({ creatorId: id, creatorName: "Luna Noir", creatorInitial: "L" })}
                 >
                   <MessageCircle className="w-4 h-4" /> Start Private Chat
                 </Button>

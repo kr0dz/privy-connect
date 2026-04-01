@@ -3,38 +3,70 @@ import { X, Send, Lock, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useRef } from "react";
 import { useModals } from "@/contexts/ModalContext";
+import { useChat } from "@/hooks/useChat";
+import { authService } from "@/services/auth/authService";
 
 interface ChatModalProps {
   open: boolean;
   onClose: () => void;
+  creatorId?: string;
   creatorName: string;
   creatorInitial: string;
 }
 
 interface Message {
-  id: number;
+  id: string;
   sender: "creator" | "user" | "system";
   text: string;
   timestamp: string;
+  locked?: boolean;
+  paid?: boolean;
+  price?: number;
 }
 
 const initialMessages: Message[] = [
-  { id: 1, sender: "creator", text: "Hey… I saw you checking my profile 👀", timestamp: "just now" },
+  { id: "1", sender: "creator", text: "Hey… I saw you checking my profile 👀", timestamp: "just now" },
 ];
 
 const followUpMessages: Message[] = [
-  { id: 10, sender: "creator", text: "I don't show this to everyone…", timestamp: "now" },
-  { id: 11, sender: "creator", text: "Want to see something special? 🔥", timestamp: "now" },
+  { id: "10", sender: "creator", text: "I don't show this to everyone…", timestamp: "now" },
+  { id: "11", sender: "creator", text: "Want to see something special? 🔥", timestamp: "now", locked: true, price: 3 },
 ];
 
-const ChatModal = ({ open, onClose, creatorName, creatorInitial }: ChatModalProps) => {
+const ChatModal = ({ open, onClose, creatorId, creatorName, creatorInitial }: ChatModalProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [paywallHit, setPaywallHit] = useState(false);
   const [userMessageCount, setUserMessageCount] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { openUnlock, trackClick } = useModals();
+  const {
+    paymentState,
+    startCheckout,
+    unlockMessage,
+    clearPaymentError,
+    confirmMessageUnlocked,
+  } = useChat(creatorId ?? null, userId);
+
+  useEffect(() => {
+    let mounted = true;
+    authService.getSession()
+      .then((session) => {
+        if (mounted) {
+          setUserId(session?.user.id ?? null);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setUserId(null);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Reset on open
   useEffect(() => {
@@ -43,6 +75,7 @@ const ChatModal = ({ open, onClose, creatorName, creatorInitial }: ChatModalProp
       setInput("");
       setPaywallHit(false);
       setUserMessageCount(0);
+      clearPaymentError();
 
       // Simulate initial message with delay
       setTimeout(() => {
@@ -53,7 +86,23 @@ const ChatModal = ({ open, onClose, creatorName, creatorInitial }: ChatModalProp
         }, 1500);
       }, 500);
     }
-  }, [open]);
+  }, [open, clearPaymentError]);
+
+  useEffect(() => {
+    if (!open || typeof window === "undefined") {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const success = params.get("stripe_success");
+    const messageId = params.get("message_id");
+
+    if (success === "1" && messageId) {
+      confirmMessageUnlocked(messageId);
+      setMessages((prev) => prev.map((msg) => (msg.id === messageId ? { ...msg, locked: false, paid: true } : msg)));
+      window.location.reload();
+    }
+  }, [open, confirmMessageUnlocked]);
 
   // Auto-scroll
   useEffect(() => {
@@ -64,7 +113,7 @@ const ChatModal = ({ open, onClose, creatorName, creatorInitial }: ChatModalProp
     if (!input.trim() || paywallHit) return;
 
     const userMsg: Message = {
-      id: Date.now(),
+      id: String(Date.now()),
       sender: "user",
       text: input,
       timestamp: "now",
@@ -84,7 +133,15 @@ const ChatModal = ({ open, onClose, creatorName, creatorInitial }: ChatModalProp
         setPaywallHit(true);
         setMessages((prev) => [
           ...prev,
-          { id: Date.now() + 1, sender: "system", text: "🔒 Unlock this conversation to continue chatting", timestamp: "now" },
+            {
+              id: String(Date.now() + 1),
+              sender: "system",
+              text: "🔒 Unlock this conversation to continue chatting",
+              timestamp: "now",
+              locked: true,
+              price: 3,
+              paid: false,
+            },
         ]);
       }, 1000);
     } else {
@@ -93,8 +150,42 @@ const ChatModal = ({ open, onClose, creatorName, creatorInitial }: ChatModalProp
       const followUp = followUpMessages[newCount - 1] || followUpMessages[0];
       setTimeout(() => {
         setIsTyping(false);
-        setMessages((prev) => [...prev, { ...followUp, id: Date.now() + 1 }]);
+        setMessages((prev) => [...prev, { ...followUp, id: String(Date.now() + 1) }]);
       }, 1500 + Math.random() * 1000);
+    }
+  };
+
+  const handleUnlock = async (message: Message) => {
+    if (!message.locked) {
+      return;
+    }
+
+    const unlockResult = await unlockMessage(message.id, message.price ?? 0);
+    if (!unlockResult.ok) {
+      return;
+    }
+
+    if (!unlockResult.requiresCheckout) {
+      setMessages((prev) => prev.map((msg) => (msg.id === message.id ? { ...msg, locked: false, paid: true } : msg)));
+      return;
+    }
+
+    const currentUrl = typeof window !== "undefined" ? window.location.href : "";
+    const checkoutResult = await startCheckout({
+      amount: unlockResult.amount ?? message.price ?? 0,
+      currency: "usd",
+      description: `Unlock de mensaje con ${creatorName}`,
+      messageId: message.id,
+      metadata: {
+        messageId: message.id,
+        creatorName,
+      },
+      successUrl: `${currentUrl.split("?")[0]}?stripe_success=1&message_id=${encodeURIComponent(message.id)}`,
+      cancelUrl: `${currentUrl.split("?")[0]}?stripe_canceled=1`,
+    });
+
+    if (checkoutResult.ok && checkoutResult.checkoutUrl) {
+      window.open(checkoutResult.checkoutUrl, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -149,16 +240,17 @@ const ChatModal = ({ open, onClose, creatorName, creatorInitial }: ChatModalProp
                       <Lock className="w-5 h-5 text-primary mx-auto mb-2" />
                       <p className="text-sm text-foreground mb-3">{msg.text}</p>
                       <div className="flex flex-col gap-2">
-                        <Button
-                          variant="gold"
-                          size="sm"
-                          onClick={() => {
-                            onClose();
-                            setTimeout(() => openUnlock({ title: "Unlock Conversation", price: "$3", description: `Continue your private chat with ${creatorName}` }), 200);
-                          }}
-                        >
-                          <Lock className="w-3.5 h-3.5 mr-1" /> Unlock Reply — $3
-                        </Button>
+                        {msg.locked ? (
+                          <Button
+                            variant="gold"
+                            size="sm"
+                            onClick={() => void handleUnlock(msg)}
+                            disabled={paymentState.inProgress}
+                          >
+                            <Lock className="w-3.5 h-3.5 mr-1" />
+                            {paymentState.inProgress ? "Procesando pago..." : `Unlock Reply — $${msg.price ?? 3}`}
+                          </Button>
+                        ) : null}
                         <Button
                           variant="gold-outline"
                           size="sm"
@@ -169,6 +261,9 @@ const ChatModal = ({ open, onClose, creatorName, creatorInitial }: ChatModalProp
                         >
                           <Sparkles className="w-3.5 h-3.5 mr-1" /> Request Something — $10
                         </Button>
+                        {paymentState.error ? (
+                          <p className="text-xs text-destructive mt-1">{paymentState.error}</p>
+                        ) : null}
                       </div>
                     </div>
                   ) : (

@@ -12,6 +12,7 @@ interface UnlockData {
 }
 
 interface ChatData {
+  creatorId?: string;
   creatorName: string;
   creatorInitial: string;
 }
@@ -36,7 +37,7 @@ export const useModals = () => {
 export const ModalProvider = ({ children }: { children: ReactNode }) => {
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [unlockData, setUnlockData] = useState<UnlockData>({ title: "", price: "" });
-  const [chatData, setChatData] = useState<ChatData>({ creatorName: "", creatorInitial: "" });
+  const [chatData, setChatData] = useState<ChatData>({ creatorId: undefined, creatorName: "", creatorInitial: "" });
   const [clickLog, setClickLog] = useState<{ action: string; timestamp: number }[]>([]);
 
   const trackClick = useCallback((action: string) => {

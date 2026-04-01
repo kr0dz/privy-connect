@@ -20,10 +20,24 @@ interface CheckoutRequest {
   currency?: string;
   description: string;
   messageId?: string;
+  metadata?: Record<string, string>;
+  successUrl?: string;
+  cancelUrl?: string;
+}
+
+interface UnlockResult {
+  ok: boolean;
+  requiresCheckout: boolean;
+  amount?: number;
+  message?: string;
 }
 
 const stripePublishableKey =
   (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_STRIPE_PUBLISHABLE_KEY ?? '';
+const supabaseUrl =
+  (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_SUPABASE_URL ?? '';
+const supabaseAnonKey =
+  (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_SUPABASE_ANON_KEY ?? '';
 
 export const useChat = (creatorId: string | null, userId: string | null) => {
   const [state, setState] = useState<ChatState>({
@@ -120,7 +134,39 @@ export const useChat = (creatorId: string | null, userId: string | null) => {
     }
   }, [addMessage, inferMemoryFromText, userId]);
 
-  const unlockMessage = useCallback((messageId: string) => {
+  const unlockMessage = useCallback(async (messageId: string, fallbackPrice?: number): Promise<UnlockResult> => {
+    const target = state.messages.find(msg => msg.id === messageId);
+
+    if (!target) {
+      return { ok: false, requiresCheckout: false, message: 'Mensaje no encontrado.' };
+    }
+
+    if (!target.locked || target.paid) {
+      setState(prev => ({
+        ...prev,
+        messages: prev.messages.map(msg => (msg.id === messageId ? { ...msg, locked: false, paid: true } : msg)),
+      }));
+      return { ok: true, requiresCheckout: false };
+    }
+
+    const amount = typeof target.price === 'number' ? target.price : fallbackPrice ?? 0;
+    if (amount > 0) {
+      return {
+        ok: true,
+        requiresCheckout: true,
+        amount,
+      };
+    }
+
+    setState(prev => ({
+      ...prev,
+      messages: prev.messages.map(msg => (msg.id === messageId ? { ...msg, locked: false, paid: true } : msg)),
+    }));
+
+    return { ok: true, requiresCheckout: false };
+  }, [state.messages]);
+
+  const confirmMessageUnlocked = useCallback((messageId: string) => {
     setState(prev => ({
       ...prev,
       messages: prev.messages.map(msg => (msg.id === messageId ? { ...msg, locked: false, paid: true } : msg)),
@@ -133,19 +179,33 @@ export const useChat = (creatorId: string | null, userId: string | null) => {
       return { ok: false };
     }
 
+    if (!supabaseUrl || !supabaseAnonKey) {
+      setPayment({ inProgress: false, error: 'Falta configurar Supabase para iniciar checkout.', lastTransactionId: null });
+      return { ok: false };
+    }
+
     setPayment(prev => ({ ...prev, inProgress: true, error: null }));
 
     try {
-      const response = await fetch('/api/stripe/create-test-checkout-session', {
+      const response = await fetch(`${supabaseUrl}/functions/v1/stripe-create-checkout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
         body: JSON.stringify({
           creatorId,
           userId,
           amount: request.amount,
           currency: request.currency ?? 'usd',
-          description: request.description,
-          messageId: request.messageId,
+          metadata: {
+            ...(request.metadata ?? {}),
+            description: request.description,
+            messageId: request.messageId ?? '',
+          },
+          successUrl: request.successUrl,
+          cancelUrl: request.cancelUrl,
         }),
       });
 
@@ -154,14 +214,14 @@ export const useChat = (creatorId: string | null, userId: string | null) => {
         throw new Error(reason || 'No se pudo crear la sesion de checkout.');
       }
 
-      const data = (await response.json()) as { checkoutUrl?: string; transactionId?: string };
+      const data = (await response.json()) as { url?: string; sessionId?: string; transactionId?: string };
       setPayment({
         inProgress: false,
         error: null,
-        lastTransactionId: data.transactionId ?? null,
+        lastTransactionId: data.transactionId ?? data.sessionId ?? null,
       });
 
-      return { ok: Boolean(data.checkoutUrl), checkoutUrl: data.checkoutUrl };
+      return { ok: Boolean(data.url), checkoutUrl: data.url };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error inesperado iniciando pago.';
       setPayment({ inProgress: false, error: message, lastTransactionId: null });
@@ -188,8 +248,10 @@ export const useChat = (creatorId: string | null, userId: string | null) => {
     fanMemories,
     addFanMemory,
     payment,
+    paymentState: payment,
     startCheckout,
     clearPaymentError,
     unlockMessage,
+    confirmMessageUnlocked,
   };
 };
