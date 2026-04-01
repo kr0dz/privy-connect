@@ -39,6 +39,15 @@ export type Tables = {
     scheduled_for: string | null;
     created_at: string;
   };
+  video_calls: {
+    id: string;
+    creator_id: string;
+    fan_id: string | null;
+    start_time: string;
+    duration: number;
+    status: 'available' | 'booked' | 'completed' | 'cancelled';
+    created_at: string;
+  };
   messages: {
     id: string;
     sender_id: string;

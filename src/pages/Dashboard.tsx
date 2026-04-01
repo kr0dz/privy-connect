@@ -9,6 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import EditDraftModal from '@/components/modals/EditDraftModal';
 import ContentLibrary from '@/components/dashboard/ContentLibrary';
+import Calendar from '@/components/dashboard/Calendar';
+import Notifications from '@/components/dashboard/Notifications';
+import Analytics from '@/components/dashboard/Analytics';
 import { supabase } from '@/lib/supabase';
 import { authService, type UserRole } from '@/services/auth/authService';
 
@@ -261,6 +264,9 @@ const Dashboard = () => {
           <TabsList className="bg-surface-glass border border-primary/20 p-1 h-auto flex flex-wrap justify-start gap-1">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="content">Content Library</TabsTrigger>
+            <TabsTrigger value="calendar">Calendar</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -432,6 +438,18 @@ const Dashboard = () => {
 
           <TabsContent value="content" className="space-y-6">
             {creatorId ? <ContentLibrary creatorId={creatorId} /> : null}
+          </TabsContent>
+
+          <TabsContent value="calendar" className="space-y-6">
+            {creatorId ? <Calendar creatorId={creatorId} /> : null}
+          </TabsContent>
+
+          <TabsContent value="notifications" className="space-y-6">
+            {creatorId ? <Notifications creatorId={creatorId} /> : null}
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-6">
+            {creatorId ? <Analytics creatorId={creatorId} /> : null}
           </TabsContent>
         </Tabs>
       </main>
