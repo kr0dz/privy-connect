@@ -11,6 +11,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
+
 export type Tables = {
   profiles: {
     id: string;
@@ -34,6 +36,9 @@ export type Tables = {
     paid: boolean;
     price: number | null;
     read: boolean;
+    requires_payment: boolean | null;
+    trigger_type: 'unlock' | 'tip' | 'custom_request' | 'subscription' | null;
+    metadata: Json | null;
     created_at: string;
   };
   creator_personalities: {
@@ -46,6 +51,53 @@ export type Tables = {
     response_style: string;
     emoji_usage: string;
     topics: string[];
+    updated_at: string;
+  };
+  creator_twins: {
+    id: string;
+    creator_id: string;
+    display_name: string | null;
+    system_prompt: string | null;
+    style_overrides: Json | null;
+    draft_mode_enabled: boolean;
+    auto_send_enabled: boolean;
+    active: boolean;
+    created_at: string;
+    updated_at: string;
+  };
+  fan_memories: {
+    id: string;
+    creator_id: string;
+    fan_id: string;
+    key: string;
+    value: string;
+    importance: number;
+    source_message_id: string | null;
+    metadata: Json | null;
+    created_at: string;
+    updated_at: string;
+  };
+  wallets: {
+    id: string;
+    user_id: string;
+    currency: string;
+    balance: number;
+    stripe_customer_id: string | null;
+    created_at: string;
+    updated_at: string;
+  };
+  transactions: {
+    id: string;
+    wallet_id: string;
+    user_id: string;
+    amount: number;
+    currency: string;
+    status: 'pending' | 'succeeded' | 'failed' | 'canceled';
+    type: 'debit' | 'credit';
+    provider: 'stripe' | 'manual' | 'promo';
+    provider_ref: string | null;
+    metadata: Json | null;
+    created_at: string;
     updated_at: string;
   };
 };
