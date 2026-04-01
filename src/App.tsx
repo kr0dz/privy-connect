@@ -10,6 +10,10 @@ import Discover from "./pages/Discover.tsx";
 import CreatorProfile from "./pages/CreatorProfile.tsx";
 import Login from "./pages/Login.tsx";
 import Signup from "./pages/Signup.tsx";
+import Dashboard from "./pages/Dashboard.tsx";
+import FanDashboard from "./pages/FanDashboard.tsx";
+import CreatorDashboard from "./pages/CreatorDashboard.tsx";
+import AdminDashboard from "./pages/AdminDashboard.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -28,6 +32,10 @@ const App = () => (
             <Route path="/creator/:id" element={<CreatorProfile />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/dashboard/fan" element={<FanDashboard />} />
+            <Route path="/dashboard/creator" element={<CreatorDashboard />} />
+            <Route path="/dashboard/admin" element={<AdminDashboard />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </ModalProvider>

@@ -30,7 +30,7 @@ const Login = () => {
       .getSession()
       .then((session) => {
         if (!cancelled && session) {
-          navigate("/discover", { replace: true });
+          navigate("/dashboard", { replace: true });
         }
       })
       .catch(() => {
@@ -58,7 +58,7 @@ const Login = () => {
       });
 
       toast.success("Sesión iniciada correctamente.");
-      navigate("/discover", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
