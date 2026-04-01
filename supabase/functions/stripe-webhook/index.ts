@@ -13,6 +13,32 @@ interface WalletRow {
   currency: string;
 }
 
+interface PushTokenRow {
+  token: string;
+}
+
+async function sendExpoPushNotification(token: string, title: string, body: string, accessToken?: string) {
+  const response = await fetch('https://exp.host/--/api/v2/push/send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({
+      to: token,
+      sound: 'default',
+      title,
+      body,
+      data: { scope: 'creator_dashboard' },
+    }),
+  });
+
+  if (!response.ok) {
+    const payload = await response.text();
+    throw new Error(`Expo push failed: ${payload}`);
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -22,6 +48,7 @@ Deno.serve(async (req: Request) => {
   const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const expoAccessToken = Deno.env.get("EXPO_ACCESS_TOKEN");
 
   if (!stripeSecretKey || !webhookSecret || !supabaseUrl || !serviceRole) {
     return new Response(JSON.stringify({ error: "Missing webhook environment variables" }), {
@@ -68,6 +95,18 @@ Deno.serve(async (req: Request) => {
         .update({ paid: true, requires_payment: false, read: false })
         .eq("id", messageId);
     }
+
+    await supabase.from('analytics_events').insert({
+      user_id: userId || null,
+      creator_id: creatorId || null,
+      event_type: 'payment',
+      metadata: {
+        stripe_session_id: session.id,
+        message_id: messageId || null,
+        amount,
+        currency,
+      },
+    });
 
     if (creatorId) {
       const { data: walletData, error: walletError } = await supabase
@@ -124,11 +163,30 @@ Deno.serve(async (req: Request) => {
             stripe_session_id: session.id,
             fan_user_id: userId,
             message_id: messageId || null,
+            content_type: metadata.contentType || metadata.content_type || 'chat_unlock',
           },
         });
 
         if (transactionError) {
           console.error("Error inserting transaction:", transactionError);
+        }
+      }
+
+      const { data: tokens } = await supabase
+        .from('push_tokens')
+        .select('token')
+        .eq('user_id', creatorId);
+
+      for (const tokenRow of ((tokens || []) as PushTokenRow[])) {
+        try {
+          await sendExpoPushNotification(
+            tokenRow.token,
+            'Nueva compra en PrivyLoop',
+            `Recibiste $${amount.toFixed(2)} de un fan.`,
+            expoAccessToken ?? undefined
+          );
+        } catch (pushError) {
+          console.error('Error sending push notification:', pushError);
         }
       }
     }

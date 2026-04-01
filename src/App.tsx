@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ModalProvider } from "@/contexts/ModalContext";
 import ActivityPopup from "@/components/ActivityPopup";
+import Onboarding from "@/components/Onboarding";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import Index from "./pages/Index.tsx";
 import Discover from "./pages/Discover.tsx";
 import CreatorProfile from "./pages/CreatorProfile.tsx";
@@ -19,31 +21,36 @@ import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <ModalProvider>
-          <ActivityPopup />
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/discover" element={<Discover />} />
-            <Route path="/creator/:id" element={<CreatorProfile />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/dashboard/fan" element={<FanDashboard />} />
-            <Route path="/dashboard/creator" element={<CreatorDashboard />} />
-            <Route path="/creator/settings" element={<CreatorSettings />} />
-            <Route path="/dashboard/admin" element={<AdminDashboard />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </ModalProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  usePushNotifications();
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <ModalProvider>
+            <ActivityPopup />
+            <Onboarding />
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/discover" element={<Discover />} />
+              <Route path="/creator/:id" element={<CreatorProfile />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard/fan" element={<FanDashboard />} />
+              <Route path="/dashboard/creator" element={<CreatorDashboard />} />
+              <Route path="/creator/settings" element={<CreatorSettings />} />
+              <Route path="/dashboard/admin" element={<AdminDashboard />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </ModalProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

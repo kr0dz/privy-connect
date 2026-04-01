@@ -1,4 +1,5 @@
 import { CreatorPersonality } from '@/types/chat';
+import { supabase } from '@/lib/supabase-extended';
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
@@ -43,6 +44,7 @@ export class DeepSeekService {
   private apiKey: string;
   private personality: CreatorPersonality;
   private conversationMemory: Map<string, DeepSeekMessage[]> = new Map();
+  private cacheTtlDays = 30;
 
   constructor(apiKey: string, personality: CreatorPersonality) {
     this.apiKey = apiKey;
@@ -143,8 +145,62 @@ Reglas obligatorias:
     this.conversationMemory.set(userId, next);
   }
 
+  private async createQueryHash(userMessage: string): Promise<string> {
+    const seed = JSON.stringify({
+      message: userMessage.trim().toLowerCase(),
+      creatorId: this.personality.id,
+      tone: this.personality.tone,
+      responseStyle: this.personality.responseStyle,
+    });
+
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(seed));
+    return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  private async getCachedResponse(hash: string): Promise<string | null> {
+    const nowIso = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from('ai_response_cache')
+      .select('response, expires_at')
+      .eq('query_hash', hash)
+      .eq('creator_id', this.personality.id)
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data?.response) {
+      return null;
+    }
+
+    return String(data.response);
+  }
+
+  private async storeCachedResponse(hash: string, response: string): Promise<void> {
+    const expiresAt = new Date(Date.now() + this.cacheTtlDays * 24 * 60 * 60 * 1000).toISOString();
+
+    try {
+      await supabase.from('ai_response_cache').upsert({
+        query_hash: hash,
+        response,
+        creator_id: this.personality.id,
+        expires_at: expiresAt,
+      }, { onConflict: 'query_hash,creator_id' });
+    } catch (error) {
+      console.error('Error storing AI cache:', error);
+    }
+  }
+
   async generateResponse(userMessage: string, userId: string, context?: DeepSeekGenerationContext): Promise<string> {
     try {
+      const queryHash = await this.createQueryHash(userMessage);
+      const cached = await this.getCachedResponse(queryHash);
+      if (cached) {
+        this.updateMemory(userId, userMessage, cached);
+        return cached;
+      }
+
       const response = await fetch(DEEPSEEK_API_URL, {
         method: 'POST',
         headers: {
@@ -176,6 +232,7 @@ Reglas obligatorias:
       }
 
       this.updateMemory(userId, userMessage, aiResponse);
+      await this.storeCachedResponse(queryHash, aiResponse);
       return aiResponse;
     } catch (error) {
       console.error('Error generating AI response:', error);

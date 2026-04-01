@@ -23,6 +23,7 @@ export type Tables = {
     bio: string;
     subscription_tier: 'free' | 'premium' | 'vip';
     wallet_balance: number;
+    onboarding_completed: boolean;
     created_at: string;
   };
   messages: {
@@ -38,6 +39,8 @@ export type Tables = {
     read: boolean;
     requires_payment: boolean | null;
     trigger_type: 'unlock' | 'tip' | 'custom_request' | 'subscription' | null;
+    status: 'draft' | 'sent' | 'discarded' | string;
+    sent: boolean;
     metadata: Json | null;
     created_at: string;
   };
@@ -111,5 +114,36 @@ export type Tables = {
     metadata: Json | null;
     created_at: string;
     updated_at: string;
+  };
+  testimonials: {
+    id: string;
+    quote: string;
+    author: string;
+    role: string | null;
+    avatar_url: string | null;
+    created_at: string;
+  };
+  push_tokens: {
+    id: string;
+    user_id: string;
+    token: string;
+    device: string | null;
+    created_at: string;
+  };
+  analytics_events: {
+    id: string;
+    user_id: string | null;
+    creator_id: string | null;
+    event_type: string;
+    metadata: Json | null;
+    created_at: string;
+  };
+  ai_response_cache: {
+    id: string;
+    query_hash: string;
+    response: string;
+    creator_id: string;
+    created_at: string;
+    expires_at: string | null;
   };
 };

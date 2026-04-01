@@ -11,6 +11,8 @@ export interface Message {
   paid?: boolean;
   price?: number;
   locked?: boolean;
+  status?: 'draft' | 'sent' | 'discarded' | string;
+  sent?: boolean;
 }
 
 export interface CreatorPersonality {

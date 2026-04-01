@@ -26,6 +26,8 @@ interface CreatorTwinRecord {
   display_name: string | null;
   system_prompt: string | null;
   style_overrides: unknown;
+  draft_mode: boolean | null;
+  auto_send: boolean | null;
   draft_mode_enabled: boolean;
   auto_send_enabled: boolean;
 }
@@ -195,6 +197,8 @@ export class ChatService {
           trigger_type: trigger?.type ?? null,
           metadata: trigger ? { trigger_reason: trigger.reason, trigger_amount: trigger.amount } : null,
           requires_payment: false,
+          status: 'sent',
+          sent: true,
         },
         {
           sender_id: newMessage.senderId,
@@ -212,6 +216,10 @@ export class ChatService {
 
       const message = this.mapMessageRow(data);
       await this.rememberFromMessage(message.content, message.id);
+      await this.trackAnalyticsEvent('message_sent', {
+        message_id: message.id,
+        trigger_type: trigger?.type ?? null,
+      });
 
       let aiMessage: Message | null = null;
       const twin = await this.getCreatorTwin();
@@ -265,6 +273,9 @@ export class ChatService {
       );
 
       const requiresPayment = Boolean(trigger);
+      const status = draftMode ? 'draft' : 'sent';
+      const sent = !draftMode;
+
       const aiInsert = await this.insertMessageWithFallback(
         {
           sender_id: this.creatorId,
@@ -277,6 +288,8 @@ export class ChatService {
           paid: !requiresPayment,
           requires_payment: requiresPayment,
           trigger_type: trigger?.type ?? null,
+          status,
+          sent,
           metadata: {
             draft_mode: draftMode,
             draft_pending_approval: draftMode,
@@ -295,6 +308,15 @@ export class ChatService {
 
       if (aiInsert.error || !aiInsert.data) {
         throw aiInsert.error ?? new Error('No se pudo guardar la respuesta IA.');
+      }
+
+      await this.trackAnalyticsEvent(draftMode ? 'ai_draft_created' : 'ai_response_sent', {
+        message_id: String(aiInsert.data.id),
+        draft_mode: draftMode,
+      });
+
+      if (draftMode) {
+        return null;
       }
 
       return this.mapMessageRow(aiInsert.data);
@@ -336,6 +358,8 @@ export class ChatService {
       paid: typeof data.paid === 'boolean' ? data.paid : undefined,
       price: typeof data.price === 'number' ? data.price : undefined,
       locked: typeof data.requires_payment === 'boolean' ? data.requires_payment : undefined,
+      status: typeof data.status === 'string' ? data.status : undefined,
+      sent: typeof data.sent === 'boolean' ? data.sent : undefined,
     };
   }
 
@@ -422,7 +446,7 @@ export class ChatService {
 
     const { data, error } = await supabase
       .from('creator_twins')
-      .select('id, display_name, system_prompt, style_overrides, draft_mode_enabled, auto_send_enabled')
+      .select('id, display_name, system_prompt, style_overrides, draft_mode, auto_send, draft_mode_enabled, auto_send_enabled')
       .eq('creator_id', this.creatorId)
       .eq('active', true)
       .maybeSingle();
@@ -441,8 +465,10 @@ export class ChatService {
       display_name: typeof data.display_name === 'string' ? data.display_name : null,
       system_prompt: typeof data.system_prompt === 'string' ? data.system_prompt : null,
       style_overrides: data.style_overrides,
-      draft_mode_enabled: Boolean(data.draft_mode_enabled),
-      auto_send_enabled: Boolean(data.auto_send_enabled),
+      draft_mode: typeof data.draft_mode === 'boolean' ? data.draft_mode : null,
+      auto_send: typeof data.auto_send === 'boolean' ? data.auto_send : null,
+      draft_mode_enabled: Boolean(data.draft_mode_enabled ?? data.draft_mode),
+      auto_send_enabled: Boolean(data.auto_send_enabled ?? data.auto_send),
     };
 
     this.creatorTwinCache = twin;
@@ -528,18 +554,37 @@ export class ChatService {
 
   async getConversation(limit = 50): Promise<Message[]> {
     try {
-      const { data, error } = await supabase
+      const baseQuery = supabase
         .from('messages')
         .select('*')
         .or(`and(sender_id.eq.${this.userId},receiver_id.eq.${this.creatorId}),and(sender_id.eq.${this.creatorId},receiver_id.eq.${this.userId})`)
         .order('created_at', { ascending: true })
         .limit(limit);
 
+      let data: Record<string, unknown>[] | null = null;
+      let error: { message?: string } | null = null;
+
+      const withStatusFilter = await baseQuery.not('status', 'eq', 'draft');
+      data = withStatusFilter.data as unknown as Record<string, unknown>[] | null;
+      error = withStatusFilter.error;
+
+      if (error && String(error.message || '').toLowerCase().includes('column')) {
+        const legacy = await supabase
+          .from('messages')
+          .select('*')
+          .or(`and(sender_id.eq.${this.userId},receiver_id.eq.${this.creatorId}),and(sender_id.eq.${this.creatorId},receiver_id.eq.${this.userId})`)
+          .order('created_at', { ascending: true })
+          .limit(limit);
+
+        data = legacy.data as unknown as Record<string, unknown>[] | null;
+        error = legacy.error;
+      }
+
       if (error) {
         throw error;
       }
 
-      return (data || []).map(msg => this.mapMessageRow(msg as unknown as Record<string, unknown>));
+      return (data || []).map(msg => this.mapMessageRow(msg));
     } catch (error) {
       console.error('Error getting conversation:', error);
       return [];
@@ -561,6 +606,9 @@ export class ChatService {
           if (!this.belongsToConversation(raw)) {
             return;
           }
+          if (!this.shouldDeliverToFan(raw)) {
+            return;
+          }
           onChange(this.mapMessageRow(raw), 'INSERT');
         }
       )
@@ -574,6 +622,9 @@ export class ChatService {
         (payload) => {
           const raw = payload.new as Record<string, unknown>;
           if (!this.belongsToConversation(raw)) {
+            return;
+          }
+          if (!this.shouldDeliverToFan(raw)) {
             return;
           }
           onChange(this.mapMessageRow(raw), 'UPDATE');
@@ -597,6 +648,30 @@ export class ChatService {
     const isUserToCreator = senderId === this.userId && receiverId === this.creatorId;
     const isCreatorToUser = senderId === this.creatorId && receiverId === this.userId;
     return isUserToCreator || isCreatorToUser;
+  }
+
+  private shouldDeliverToFan(row: Record<string, unknown>): boolean {
+    const status = typeof row.status === 'string' ? row.status : 'sent';
+    const sent = typeof row.sent === 'boolean' ? row.sent : true;
+
+    if (status === 'draft' || sent === false) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private async trackAnalyticsEvent(eventType: string, metadata: Record<string, unknown>): Promise<void> {
+    try {
+      await supabase.from('analytics_events').insert({
+        user_id: this.userId,
+        creator_id: this.creatorId,
+        event_type: eventType,
+        metadata,
+      });
+    } catch (error) {
+      console.error('Error tracking analytics event:', error);
+    }
   }
 
   getCreatorOnlineStatus(): boolean {
