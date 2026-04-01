@@ -8,6 +8,8 @@ import ActivityPopup from "@/components/ActivityPopup";
 import Index from "./pages/Index.tsx";
 import Discover from "./pages/Discover.tsx";
 import CreatorProfile from "./pages/CreatorProfile.tsx";
+import Login from "./pages/Login.tsx";
+import Signup from "./pages/Signup.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -24,7 +26,8 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/discover" element={<Discover />} />
             <Route path="/creator/:id" element={<CreatorProfile />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </ModalProvider>
