@@ -1,8 +1,7 @@
-import { createClient, type Session, type SupabaseClient, type User } from '@supabase/supabase-js';
+import { type Session, type SupabaseClient, type User } from '@supabase/supabase-js';
+import { supabase as sharedSupabase } from '../../lib/supabase';
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-const SUPABASE_URL = env?.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = env?.VITE_SUPABASE_ANON_KEY;
 const STORAGE_SECRET = env?.VITE_AUTH_STORAGE_SECRET;
 
 const SESSION_STORAGE_KEY = 'privy-connect:auth:session';
@@ -70,12 +69,6 @@ const webAsyncStorage: AsyncStorageLike = {
     window.localStorage.removeItem(key);
   },
 };
-
-function ensureSupabaseConfigured() {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    throw new Error('Falta configurar VITE_SUPABASE_URL y/o VITE_SUPABASE_ANON_KEY');
-  }
-}
 
 function resolveRole(user: User | null): UserRole {
   const role = (user?.user_metadata?.role || user?.app_metadata?.role || 'fan') as UserRole;
@@ -173,15 +166,7 @@ function getClient(externalClient?: SupabaseClient): SupabaseClient {
   if (externalClient) {
     return externalClient;
   }
-
-  ensureSupabaseConfigured();
-  return createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: true,
-      detectSessionInUrl: false,
-    },
-  });
+  return sharedSupabase;
 }
 
 export interface AuthService {
