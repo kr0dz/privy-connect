@@ -17,6 +17,8 @@ export interface CreatorTwinForm {
   trigger_keywords: string[];
   draft_mode: boolean;
   auto_send: boolean;
+  paid_messaging_enabled: boolean;
+  message_price_coins: number;
 }
 
 const defaultForm: CreatorTwinForm = {
@@ -32,6 +34,8 @@ const defaultForm: CreatorTwinForm = {
   trigger_keywords: [],
   draft_mode: false,
   auto_send: true,
+  paid_messaging_enabled: false,
+  message_price_coins: 5,
 };
 
 function safeStringArray(input: unknown): string[] {
@@ -91,6 +95,8 @@ export const useCreatorTwin = () => {
         trigger_keywords: safeStringArray(data.trigger_keywords),
         draft_mode: Boolean(data.draft_mode),
         auto_send: typeof data.auto_send === 'boolean' ? data.auto_send : true,
+        paid_messaging_enabled: Boolean(data.paid_messaging_enabled),
+        message_price_coins: typeof data.message_price_coins === 'number' ? data.message_price_coins : 5,
       });
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : 'No se pudo cargar la configuracion del gemelo.';
@@ -129,17 +135,24 @@ export const useCreatorTwin = () => {
         trigger_keywords: next.trigger_keywords,
         draft_mode: next.draft_mode,
         auto_send: next.auto_send,
+        paid_messaging_enabled: next.paid_messaging_enabled,
+        message_price_coins: next.message_price_coins,
         draft_mode_enabled: next.draft_mode,
         auto_send_enabled: next.auto_send,
         active: true,
       };
 
-      const { error: saveError } = await supabase
+      const { error: saveError, data: savedRows } = await supabase
         .from('creator_twins')
-        .upsert(payload, { onConflict: 'creator_id' });
+        .upsert(payload, { onConflict: 'creator_id' })
+        .select('creator_id');
 
       if (saveError) {
         throw saveError;
+      }
+
+      if (!savedRows || savedRows.length === 0) {
+        throw new Error('No se persistio la configuracion del gemelo. Revisa politicas RLS de creator_twins.');
       }
 
       setForm(next);

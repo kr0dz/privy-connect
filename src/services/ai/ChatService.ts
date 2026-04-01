@@ -30,6 +30,8 @@ interface CreatorTwinRecord {
   auto_send: boolean | null;
   draft_mode_enabled: boolean;
   auto_send_enabled: boolean;
+  paid_messaging_enabled: boolean;
+  message_price_coins: number;
 }
 
 interface PaymentTrigger {
@@ -48,6 +50,8 @@ export interface ChatWithMemoryResult {
   aiMessage: Message | null;
   trigger: PaymentTrigger | null;
   draftMode: boolean;
+  coinsSpent?: number;
+  error?: string;
 }
 
 type PersonalityTone = CreatorPersonality['tone'];
@@ -175,6 +179,30 @@ export class ChatService {
     const type = options.type ?? 'text';
 
     try {
+      const twin = await this.getCreatorTwin();
+      const paidMessagingEnabled = Boolean(twin?.paid_messaging_enabled);
+      const messagePriceCoins = Math.max(1, Number(twin?.message_price_coins || 5));
+      let coinsSpent = 0;
+
+      if (paidMessagingEnabled && this.userId !== this.creatorId) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('wallet_balance')
+          .eq('id', this.userId)
+          .maybeSingle();
+
+        if (profileError) {
+          throw profileError;
+        }
+
+        const walletBalance = Number(profile?.wallet_balance || 0);
+        if (walletBalance < messagePriceCoins) {
+          throw new Error('Insufficient coins. Buy more to continue chatting.');
+        }
+
+        coinsSpent = messagePriceCoins;
+      }
+
       const trigger = this.detectPaymentTrigger(options.content);
 
       const newMessage: Omit<Message, 'id' | 'timestamp'> = {
@@ -199,6 +227,7 @@ export class ChatService {
           requires_payment: false,
           status: 'sent',
           sent: true,
+          coins_spent: coinsSpent > 0 ? coinsSpent : null,
         },
         {
           sender_id: newMessage.senderId,
@@ -215,14 +244,23 @@ export class ChatService {
       }
 
       const message = this.mapMessageRow(data);
+
+      if (coinsSpent > 0) {
+        const spendResult = await this.spendCoinsForMessage(message.id, coinsSpent);
+        if (!spendResult.ok) {
+          await supabase.from('messages').delete().eq('id', message.id);
+          throw new Error(spendResult.error || 'No se pudo descontar monedas para este mensaje.');
+        }
+      }
+
       await this.rememberFromMessage(message.content, message.id);
       await this.trackAnalyticsEvent('message_sent', {
         message_id: message.id,
         trigger_type: trigger?.type ?? null,
+        coins_spent: coinsSpent,
       });
 
       let aiMessage: Message | null = null;
-      const twin = await this.getCreatorTwin();
       const shouldAutoRespond = !this.isCreatorOnline || twin?.auto_send_enabled;
 
       if (shouldAutoRespond && this.deepSeek) {
@@ -234,14 +272,40 @@ export class ChatService {
         aiMessage,
         trigger,
         draftMode: twin?.draft_mode_enabled ?? false,
+        coinsSpent,
       };
     } catch (error) {
       console.error('Error sending message:', error);
+      const message = error instanceof Error ? error.message : 'No se pudo enviar el mensaje.';
       return {
         userMessage: null,
         aiMessage: null,
         trigger: null,
         draftMode: false,
+        coinsSpent: 0,
+        error: message,
+      };
+    }
+  }
+
+  private async spendCoinsForMessage(messageId: string, amount: number): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const { error } = await supabase.rpc('spend_message_coins', {
+        p_fan_id: this.userId,
+        p_creator_id: this.creatorId,
+        p_amount: amount,
+        p_message_id: messageId,
+      });
+
+      if (error) {
+        return { ok: false, error: error.message };
+      }
+
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'No se pudo aplicar el gasto de monedas.',
       };
     }
   }
@@ -360,6 +424,7 @@ export class ChatService {
       locked: typeof data.requires_payment === 'boolean' ? data.requires_payment : undefined,
       status: typeof data.status === 'string' ? data.status : undefined,
       sent: typeof data.sent === 'boolean' ? data.sent : undefined,
+      coinsSpent: typeof data.coins_spent === 'number' ? data.coins_spent : undefined,
     };
   }
 
@@ -446,7 +511,7 @@ export class ChatService {
 
     const { data, error } = await supabase
       .from('creator_twins')
-      .select('id, display_name, system_prompt, style_overrides, draft_mode, auto_send, draft_mode_enabled, auto_send_enabled')
+      .select('id, display_name, system_prompt, style_overrides, draft_mode, auto_send, draft_mode_enabled, auto_send_enabled, paid_messaging_enabled, message_price_coins')
       .eq('creator_id', this.creatorId)
       .eq('active', true)
       .maybeSingle();
@@ -469,6 +534,8 @@ export class ChatService {
       auto_send: typeof data.auto_send === 'boolean' ? data.auto_send : null,
       draft_mode_enabled: Boolean(data.draft_mode_enabled ?? data.draft_mode),
       auto_send_enabled: Boolean(data.auto_send_enabled ?? data.auto_send),
+      paid_messaging_enabled: Boolean(data.paid_messaging_enabled),
+      message_price_coins: typeof data.message_price_coins === 'number' ? data.message_price_coins : 5,
     };
 
     this.creatorTwinCache = twin;

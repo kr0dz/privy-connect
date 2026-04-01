@@ -99,7 +99,7 @@ const ProfileSettings = () => {
 
     setIsSaving(true);
     try {
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('profiles')
         .update({
           name: form.name,
@@ -108,16 +108,22 @@ const ProfileSettings = () => {
           instagram_url: form.instagram_url || null,
           twitter_url: form.twitter_url || null,
         })
+        .select('id')
         .eq('id', profileId);
 
       if (error) {
         throw error;
       }
 
+      if (!data || data.length === 0) {
+        throw new Error('No fue posible actualizar el perfil. Verifica permisos RLS en profiles.');
+      }
+
       toast.success('Perfil actualizado correctamente.');
+      window.dispatchEvent(new CustomEvent('profile:updated'));
     } catch (error) {
       console.error(error);
-      toast.error('No se pudo actualizar el perfil.');
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el perfil.');
     } finally {
       setIsSaving(false);
     }

@@ -46,6 +46,7 @@ export type Tables = {
     start_time: string;
     duration: number;
     status: 'available' | 'booked' | 'completed' | 'cancelled';
+    stream_call_id: string | null;
     created_at: string;
   };
   messages: {
@@ -63,6 +64,7 @@ export type Tables = {
     trigger_type: 'unlock' | 'tip' | 'custom_request' | 'subscription' | null;
     status: 'draft' | 'sent' | 'discarded' | string;
     sent: boolean;
+    coins_spent: number | null;
     metadata: Json | null;
     created_at: string;
   };
@@ -96,6 +98,8 @@ export type Tables = {
     trigger_keywords: string[] | null;
     draft_mode: boolean | null;
     auto_send: boolean | null;
+    paid_messaging_enabled: boolean | null;
+    message_price_coins: number | null;
     draft_mode_enabled: boolean;
     auto_send_enabled: boolean;
     active: boolean;

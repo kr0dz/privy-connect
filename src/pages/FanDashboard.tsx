@@ -3,6 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Card,
   CardContent,
@@ -11,11 +12,25 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { authService, type UserRole } from "@/services/auth/authService";
+import { supabase } from "@/lib/supabase";
+import VideoCall from "@/components/video/VideoCall";
+
+interface UpcomingCall {
+  id: string;
+  creator_id: string;
+  start_time: string;
+  duration: number;
+  status: 'booked' | 'completed' | 'cancelled' | 'available';
+  stream_call_id: string | null;
+}
 
 const FanDashboard = () => {
   const [role, setRole] = useState<UserRole | null | undefined>(undefined);
   const [email, setEmail] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [calls, setCalls] = useState<UpcomingCall[]>([]);
+  const [openCallId, setOpenCallId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -25,6 +40,7 @@ const FanDashboard = () => {
       .then((session) => {
         if (!mounted) return;
         setEmail(session?.user.email ?? null);
+        setUserId(session?.user.id ?? null);
       })
       .catch(() => {
         if (mounted) setEmail(null);
@@ -43,6 +59,51 @@ const FanDashboard = () => {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!userId) {
+      return;
+    }
+
+    let mounted = true;
+    const loadCalls = async () => {
+      const { data } = await supabase
+        .from('video_calls')
+        .select('id, creator_id, start_time, duration, status, stream_call_id')
+        .eq('fan_id', userId)
+        .in('status', ['booked', 'completed'])
+        .order('start_time', { ascending: true })
+        .limit(20);
+
+      if (!mounted) {
+        return;
+      }
+
+      setCalls((data || []) as UpcomingCall[]);
+    };
+
+    void loadCalls();
+    return () => {
+      mounted = false;
+    };
+  }, [userId]);
+
+  const canJoin = (row: UpcomingCall) => {
+    if (row.status !== 'booked' || !row.stream_call_id) {
+      return false;
+    }
+    const start = new Date(row.start_time).getTime();
+    return Date.now() >= start - 10 * 60 * 1000;
+  };
+
+  const callPhase = (row: UpcomingCall): 'upcoming' | 'live' | 'ended' => {
+    const start = new Date(row.start_time).getTime();
+    const end = start + row.duration * 60 * 1000;
+    const now = Date.now();
+    if (now < start) return 'upcoming';
+    if (now <= end) return 'live';
+    return 'ended';
+  };
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
@@ -163,17 +224,39 @@ const FanDashboard = () => {
 
           <Card className="bg-surface-glass border-primary/20">
             <CardHeader>
-              <CardTitle>Próximas secciones</CardTitle>
-              <CardDescription>Base para expandir después</CardDescription>
+              <CardTitle>Mis videollamadas</CardTitle>
+              <CardDescription>Llamadas reservadas con creadores</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>• Historial de compras y unlocks</p>
-              <p>• Conversaciones y favoritos</p>
-              <p>• Gestión de métodos de pago</p>
-              <p>• Configuración de cuenta</p>
+            <CardContent className="space-y-3">
+              {calls.length === 0 ? <p className="text-sm text-muted-foreground">Aun no tienes videollamadas reservadas.</p> : null}
+              {calls.map((row) => (
+                <div key={row.id} className="rounded-lg border border-border/50 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{new Date(row.start_time).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Duracion: {row.duration} min · Estado: {row.status} · {callPhase(row)}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="gold"
+                    disabled={!canJoin(row)}
+                    onClick={() => setOpenCallId(row.stream_call_id)}
+                  >
+                    Join Call
+                  </Button>
+                </div>
+              ))}
             </CardContent>
           </Card>
         </div>
+
+        <Dialog open={Boolean(openCallId)} onOpenChange={(next) => !next && setOpenCallId(null)}>
+          <DialogContent className="max-w-6xl border-primary/20 bg-background">
+            <DialogHeader>
+              <DialogTitle>Videollamada</DialogTitle>
+            </DialogHeader>
+            {openCallId && userId ? <VideoCall callId={openCallId} userId={userId} /> : null}
+          </DialogContent>
+        </Dialog>
       </main>
       <Footer />
     </div>

@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/ui/sonner';
 import AddSlotModal from '@/components/dashboard/AddSlotModal';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import VideoCall from '@/components/video/VideoCall';
 
 type VideoCallStatus = 'available' | 'booked' | 'completed' | 'cancelled';
 
@@ -15,6 +17,7 @@ interface VideoCall {
   start_time: string;
   duration: number;
   status: VideoCallStatus;
+  stream_call_id: string | null;
   created_at: string;
 }
 
@@ -33,11 +36,13 @@ const Calendar = ({ creatorId }: CalendarProps) => {
   const [slots, setSlots] = useState<VideoCall[]>([]);
   const [loading, setLoading] = useState(true);
   const [openModal, setOpenModal] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [openCallId, setOpenCallId] = useState<string | null>(null);
 
   const loadSlots = async () => {
     const { data, error } = await supabase
       .from('video_calls')
-      .select('id, creator_id, fan_id, start_time, duration, status, created_at')
+      .select('id, creator_id, fan_id, start_time, duration, status, stream_call_id, created_at')
       .eq('creator_id', creatorId)
       .order('start_time', { ascending: true })
       .limit(100);
@@ -53,8 +58,31 @@ const Calendar = ({ creatorId }: CalendarProps) => {
   };
 
   useEffect(() => {
+    void supabase.auth.getUser().then(({ data }) => {
+      setCurrentUserId(data.user?.id ?? null);
+    });
+
     void loadSlots();
   }, [creatorId]);
+
+  const canJoinCall = (slot: VideoCall) => {
+    if (slot.status !== 'booked' || !slot.stream_call_id) {
+      return false;
+    }
+
+    const start = new Date(slot.start_time).getTime();
+    const joinWindowStart = start - 10 * 60 * 1000;
+    return Date.now() >= joinWindowStart;
+  };
+
+  const callPhase = (slot: VideoCall): 'upcoming' | 'live' | 'ended' => {
+    const start = new Date(slot.start_time).getTime();
+    const end = start + slot.duration * 60 * 1000;
+    const now = Date.now();
+    if (now < start) return 'upcoming';
+    if (now <= end) return 'live';
+    return 'ended';
+  };
 
   const createSlot = async ({ startTime, duration }: { startTime: string; duration: number }) => {
     const { error } = await supabase.from('video_calls').insert({
@@ -139,9 +167,16 @@ const Calendar = ({ creatorId }: CalendarProps) => {
                       <p className="text-sm font-medium text-foreground">
                         {new Date(slot.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {slot.duration} min
                       </p>
-                      <p className="text-xs text-muted-foreground">Estado: {slot.status}</p>
+                      <p className="text-xs text-muted-foreground">Estado: {slot.status} · {callPhase(slot)}</p>
                     </div>
-                    {slot.status === 'completed' ? <CheckCircle2 className="w-4 h-4 text-blue-300" /> : <Clock3 className="w-4 h-4 text-muted-foreground" />}
+                    <div className="flex items-center gap-2">
+                      {canJoinCall(slot) ? (
+                        <Button size="sm" variant="gold" onClick={() => setOpenCallId(slot.stream_call_id)}>
+                          Join Call
+                        </Button>
+                      ) : null}
+                      {slot.status === 'completed' ? <CheckCircle2 className="w-4 h-4 text-blue-300" /> : <Clock3 className="w-4 h-4 text-muted-foreground" />}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -151,6 +186,15 @@ const Calendar = ({ creatorId }: CalendarProps) => {
       </Card>
 
       <AddSlotModal open={openModal} onOpenChange={setOpenModal} onCreate={createSlot} />
+
+      <Dialog open={Boolean(openCallId)} onOpenChange={(next) => !next && setOpenCallId(null)}>
+        <DialogContent className="max-w-6xl border-primary/20 bg-background">
+          <DialogHeader>
+            <DialogTitle>Videollamada programada</DialogTitle>
+          </DialogHeader>
+          {openCallId && currentUserId ? <VideoCall callId={openCallId} userId={currentUserId} /> : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import Stripe from "npm:stripe@14.21.0";
+import { Expo } from "npm:expo-server-sdk@4.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
 
 const corsHeaders = {
@@ -15,28 +16,6 @@ interface WalletRow {
 
 interface PushTokenRow {
   token: string;
-}
-
-async function sendExpoPushNotification(token: string, title: string, body: string, accessToken?: string) {
-  const response = await fetch('https://exp.host/--/api/v2/push/send', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
-    body: JSON.stringify({
-      to: token,
-      sound: 'default',
-      title,
-      body,
-      data: { scope: 'creator_dashboard' },
-    }),
-  });
-
-  if (!response.ok) {
-    const payload = await response.text();
-    throw new Error(`Expo push failed: ${payload}`);
-  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -79,6 +58,7 @@ Deno.serve(async (req: Request) => {
 
     const session = event.data.object as Stripe.Checkout.Session;
     const metadata = session.metadata || {};
+    const checkoutType = String(metadata.checkout_type || 'content').trim();
     const creatorId = String(metadata.creatorId || "").trim();
     const userId = String(metadata.userId || "").trim();
     const messageId = String(metadata.messageId || "").trim();
@@ -88,6 +68,78 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, serviceRole, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
+
+    if (checkoutType === 'coins') {
+      const coins = Number(metadata.coins || 0);
+      if (userId && Number.isFinite(coins) && coins > 0) {
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('wallet_balance')
+          .eq('id', userId)
+          .maybeSingle();
+
+        const nextBalance = Number(userProfile?.wallet_balance || 0) + coins;
+        const { error: coinsError } = await supabase
+          .from('profiles')
+          .update({ wallet_balance: nextBalance })
+          .eq('id', userId);
+
+        if (coinsError) {
+          console.error('Error updating coin balance:', coinsError);
+        }
+
+        const { data: walletData } = await supabase
+          .from('wallets')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        let walletId = walletData?.id as string | undefined;
+        if (!walletId) {
+          const { data: createdWallet } = await supabase
+            .from('wallets')
+            .insert({ user_id: userId, currency: 'coins', balance: 0 })
+            .select('id')
+            .single();
+          walletId = createdWallet?.id as string | undefined;
+        }
+
+        if (walletId) {
+          await supabase.from('transactions').insert({
+            wallet_id: walletId,
+            user_id: userId,
+            amount: coins,
+            currency: 'coins',
+            status: 'succeeded',
+            type: 'credit',
+            provider: 'stripe',
+            provider_ref: session.id,
+            metadata: {
+              transaction_type: 'purchase',
+              checkout_type: 'coins',
+              usd_amount: Number(session.amount_total || 0) / 100,
+              coins,
+            },
+          });
+        }
+
+        await supabase.from('analytics_events').insert({
+          user_id: userId,
+          creator_id: null,
+          event_type: 'coin_purchase',
+          metadata: {
+            stripe_session_id: session.id,
+            coins,
+            usd_amount: Number(session.amount_total || 0) / 100,
+          },
+        });
+      }
+
+      return new Response(JSON.stringify({ received: true, type: 'coins' }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (messageId) {
       await supabase
@@ -177,16 +229,28 @@ Deno.serve(async (req: Request) => {
         .select('token')
         .eq('user_id', creatorId);
 
-      for (const tokenRow of ((tokens || []) as PushTokenRow[])) {
-        try {
-          await sendExpoPushNotification(
-            tokenRow.token,
-            'Nueva compra en PrivyLoop',
-            `Recibiste $${amount.toFixed(2)} de un fan.`,
-            expoAccessToken ?? undefined
-          );
-        } catch (pushError) {
-          console.error('Error sending push notification:', pushError);
+      const expo = new Expo(expoAccessToken ? { accessToken: expoAccessToken } : undefined);
+      const validTokens = ((tokens || []) as PushTokenRow[])
+        .map(row => row.token)
+        .filter(token => Expo.isExpoPushToken(token));
+
+      if (validTokens.length > 0) {
+        const chunks = expo.chunkPushNotifications(
+          validTokens.map(token => ({
+            to: token,
+            sound: 'default',
+            title: 'New Purchase',
+            body: `A fan bought content for $${amount.toFixed(2)}`,
+            data: { scope: 'creator_dashboard', amount, currency },
+          }))
+        );
+
+        for (const chunk of chunks) {
+          try {
+            await expo.sendPushNotificationsAsync(chunk);
+          } catch (pushError) {
+            console.error('Error sending push notification chunk:', pushError);
+          }
         }
       }
     }

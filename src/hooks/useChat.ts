@@ -218,8 +218,18 @@ export const useChat = (creatorId: string | null, userId: string | null) => {
         ...prev,
         messages: prev.messages.filter(msg => msg.id !== tempId),
       }));
+
+      if (result.error) {
+        setPayment(prev => ({
+          ...prev,
+          error: result.error || 'No se pudo enviar el mensaje.',
+        }));
+      }
+
       return result;
     }
+
+    setPayment(prev => ({ ...prev, error: null }));
 
     setState(prev => ({
       ...prev,

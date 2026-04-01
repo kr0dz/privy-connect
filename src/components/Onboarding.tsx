@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase';
 
 type UserRole = 'fan' | 'creator' | 'admin';
+
+interface OnboardingProps {
+  open: boolean;
+  role: UserRole;
+  onComplete: () => Promise<void>;
+  onDontShowAgain: () => Promise<void>;
+}
 
 interface Step {
   title: string;
@@ -51,11 +57,8 @@ const adminSteps: Step[] = [
   },
 ];
 
-const Onboarding = () => {
-  const [open, setOpen] = useState(false);
+const Onboarding = ({ open, role, onComplete, onDontShowAgain }: OnboardingProps) => {
   const [index, setIndex] = useState(0);
-  const [role, setRole] = useState<UserRole>('fan');
-  const [profileId, setProfileId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const steps = useMemo(() => {
@@ -68,63 +71,21 @@ const Onboarding = () => {
     return fanSteps;
   }, [role]);
 
-  useEffect(() => {
-    let mounted = true;
-
-    const load = async () => {
-      try {
-        const { data: authData } = await supabase.auth.getUser();
-        const user = authData.user;
-        if (!mounted || !user) {
-          return;
-        }
-
-        const userRole = ((user.user_metadata?.role || user.app_metadata?.role || 'fan') as UserRole);
-        setRole(userRole);
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id, onboarding_completed')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        if (!mounted) {
-          return;
-        }
-
-        setProfileId(user.id);
-        if (!profile?.onboarding_completed) {
-          setOpen(true);
-        }
-      } catch {
-        if (mounted) {
-          setOpen(false);
-        }
-      }
-    };
-
-    void load();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   const complete = async () => {
-    if (!profileId) {
-      setOpen(false);
-      return;
-    }
-
     setIsSaving(true);
     try {
-      await supabase
-        .from('profiles')
-        .update({ onboarding_completed: true })
-        .eq('id', profileId);
+      await onComplete();
     } finally {
       setIsSaving(false);
-      setOpen(false);
+    }
+  };
+
+  const dontShowAgain = async () => {
+    setIsSaving(true);
+    try {
+      await onDontShowAgain();
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -163,6 +124,10 @@ const Onboarding = () => {
                 onClick={() => setIndex(prev => Math.max(prev - 1, 0))}
               >
                 Anterior
+              </Button>
+
+              <Button variant="ghost" disabled={isSaving} onClick={() => void dontShowAgain()}>
+                No mostrar de nuevo
               </Button>
 
               {index < steps.length - 1 ? (

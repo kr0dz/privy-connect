@@ -13,6 +13,7 @@ export interface Message {
   locked?: boolean;
   status?: 'draft' | 'sent' | 'discarded' | string;
   sent?: boolean;
+  coinsSpent?: number;
 }
 
 export interface CreatorPersonality {

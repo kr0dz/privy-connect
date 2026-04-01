@@ -52,6 +52,8 @@ const Dashboard = () => {
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [topFans, setTopFans] = useState<TopFan[]>([]);
+  const [walletBalanceCoins, setWalletBalanceCoins] = useState(0);
+  const [coinsEarnedFromMessages, setCoinsEarnedFromMessages] = useState(0);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -84,7 +86,7 @@ const Dashboard = () => {
   }, []);
 
   const loadDashboardData = async (id: string) => {
-    const [earningsRpc, topContentRpc, engagementRpc, draftsData, transactionsData] = await Promise.all([
+    const [earningsRpc, topContentRpc, engagementRpc, draftsData, transactionsData, profileData, coinEvents] = await Promise.all([
       supabase.rpc('get_creator_earnings_by_day', { p_creator_id: id, p_days: 30 }),
       supabase.rpc('get_top_content_types', { p_creator_id: id }),
       supabase.rpc('get_engagement_rate', { p_creator_id: id }),
@@ -102,6 +104,17 @@ const Dashboard = () => {
         .eq('user_id', id)
         .eq('status', 'succeeded')
         .eq('type', 'credit'),
+      supabase
+        .from('profiles')
+        .select('wallet_balance')
+        .eq('id', id)
+        .maybeSingle(),
+      supabase
+        .from('analytics_events')
+        .select('metadata')
+        .eq('creator_id', id)
+        .eq('event_type', 'message_earned')
+        .limit(1000),
     ]);
 
     setEarningsByDay(
@@ -141,6 +154,12 @@ const Dashboard = () => {
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 5));
     }
+
+    setWalletBalanceCoins(Number(profileData.data?.wallet_balance || 0));
+
+    const earned = ((coinEvents.data || []) as Array<{ metadata: { coins?: number } | null }>)
+      .reduce((acc, row) => acc + Number(row.metadata?.coins || 0), 0);
+    setCoinsEarnedFromMessages(earned);
   };
 
   useEffect(() => {
@@ -323,6 +342,28 @@ const Dashboard = () => {
             <CardContent>
               <p className="text-4xl font-bold text-violet-300">~5h hoy</p>
               <p className="text-xs text-muted-foreground mt-2">Tu gemelo respondio {drafts.length + 150} mensajes en 24h.</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-yellow-500/10 via-surface-glass to-surface-glass border-yellow-500/20 shadow-lg hover:shadow-xl transition-shadow">
+            <CardHeader className="pb-2">
+              <CardDescription className="text-xs uppercase tracking-wider">Coin balance</CardDescription>
+              <CardTitle className="text-2xl">Wallet</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-4xl font-bold text-yellow-300">{Math.floor(walletBalanceCoins)} coins</p>
+              <p className="text-xs text-muted-foreground mt-2">Disponible para monetizacion interna</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-fuchsia-500/10 via-surface-glass to-surface-glass border-fuchsia-500/20 shadow-lg hover:shadow-xl transition-shadow">
+            <CardHeader className="pb-2">
+              <CardDescription className="text-xs uppercase tracking-wider">Coins earned</CardDescription>
+              <CardTitle className="text-2xl">Paid messages</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-4xl font-bold text-fuchsia-300">{Math.floor(coinsEarnedFromMessages)} coins</p>
+              <p className="text-xs text-muted-foreground mt-2">Ingresos acumulados por mensajeria paga</p>
             </CardContent>
           </Card>
         </div>

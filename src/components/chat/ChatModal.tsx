@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect, useRef } from "react";
 import { useModals } from "@/contexts/ModalContext";
 import { useChat } from "@/hooks/useChat";
+import useWallet from "@/hooks/useWallet";
 import { authService } from "@/services/auth/authService";
 import { Message } from "@/types/chat";
+import { toast } from "sonner";
 
 interface ChatModalProps {
 	open: boolean;
@@ -21,6 +23,7 @@ const ChatModal = ({ open, onClose, creatorId, creatorName, creatorInitial }: Ch
 	const [userId, setUserId] = useState<string | null>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const { openUnlock, trackClick } = useModals();
+	 const { balance, buyCoins, deductCoins, refreshBalance } = useWallet();
 	const {
 		messages,
 		paymentState,
@@ -122,10 +125,33 @@ const ChatModal = ({ open, onClose, creatorId, creatorName, creatorInitial }: Ch
 		trackClick("chat_message_sent");
 
 		try {
-			await sendMessageWithMemory(content, "text");
+			const result = await sendMessageWithMemory(content, "text");
+			if (result.error) {
+				if (result.error.includes("Insufficient coins")) {
+					toast.error(result.error, {
+						description: "Compra monedas para seguir enviando mensajes premium.",
+					});
+				}
+				return;
+			}
+
+			if (result.coinsSpent && result.coinsSpent > 0) {
+				deductCoins(result.coinsSpent);
+				void refreshBalance();
+			}
 		} finally {
 			setIsTyping(false);
 		}
+	};
+
+	const handleBuyCoins = async () => {
+		const result = await buyCoins(100);
+		if (!result.ok || !result.checkoutUrl) {
+			toast.error(result.error || "No se pudo iniciar la compra de monedas.");
+			return;
+		}
+
+		window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
 	};
 
 	const handleUnlock = async (message: Message) => {
@@ -195,9 +221,17 @@ const ChatModal = ({ open, onClose, creatorId, creatorName, creatorInitial }: Ch
 									</div>
 								</div>
 							</div>
-							<button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-								<X className="w-5 h-5" />
-							</button>
+							<div className="flex items-center gap-2">
+								<div className="text-xs px-2 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary">
+									Coins: {Math.floor(balance)}
+								</div>
+								<Button size="sm" variant="gold-outline" onClick={() => void handleBuyCoins()}>
+									Buy Coins
+								</Button>
+								<button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+									<X className="w-5 h-5" />
+								</button>
+							</div>
 						</div>
 
 						{/* Messages */}
@@ -277,6 +311,9 @@ const ChatModal = ({ open, onClose, creatorId, creatorName, creatorInitial }: Ch
 
 						{/* Input */}
 						<div className="p-4 border-t border-border/50">
+							{balance <= 5 ? (
+								<p className="text-xs text-amber-400 mb-2">Saldo bajo de monedas. Compra mas para seguir chateando.</p>
+							) : null}
 							<div className="flex gap-2">
 								<input
 									type="text"

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { authService, type UserRole } from '@/services/auth/authService';
 import { useCreatorTwin, type CreatorTwinForm } from '@/hooks/useCreatorTwin';
 import { useEffect, useState } from 'react';
+import { toast } from '@/components/ui/sonner';
 
 function toTags(value: string): string[] {
   return value
@@ -22,7 +23,7 @@ function fromTags(values: string[]): string {
 const CreatorSettings = () => {
   const [role, setRole] = useState<UserRole | null | undefined>(undefined);
   const [localForm, setLocalForm] = useState<CreatorTwinForm | null>(null);
-  const { form, setForm, isLoading, isSaving, error, success, updateTwin } = useCreatorTwin();
+  const { form, setForm, isLoading, isSaving, error, success, updateTwin, reload } = useCreatorTwin();
 
   useEffect(() => {
     let mounted = true;
@@ -65,6 +66,10 @@ const CreatorSettings = () => {
       return 'Los precios deben ser mayores a cero.';
     }
 
+    if (localForm.paid_messaging_enabled && localForm.message_price_coins < 1) {
+      return 'El costo por mensaje debe ser al menos 1 coin.';
+    }
+
     return null;
   }, [localForm]);
 
@@ -74,8 +79,15 @@ const CreatorSettings = () => {
       return;
     }
 
-    await updateTwin(localForm);
-    setForm(localForm);
+    const ok = await updateTwin(localForm);
+    if (ok) {
+      setForm(localForm);
+      toast.success('Configuracion del gemelo actualizada.');
+      void reload();
+      return;
+    }
+
+    toast.error('No se pudo guardar la configuracion del gemelo.');
   };
 
   if (role === undefined || isLoading || !localForm) {
@@ -228,6 +240,30 @@ const CreatorSettings = () => {
                 />
                 Auto send
               </label>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={localForm.paid_messaging_enabled}
+                  onChange={(e) => setLocalForm(prev => prev ? { ...prev, paid_messaging_enabled: e.target.checked } : prev)}
+                />
+                Enable paid messaging
+              </label>
+
+              <div>
+                <label className="block text-sm mb-1">Cost per message (coins)</label>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  className="w-full bg-secondary border border-border rounded-xl px-3 py-2"
+                  value={localForm.message_price_coins}
+                  onChange={(e) => setLocalForm(prev => prev ? { ...prev, message_price_coins: Number(e.target.value || 1) } : prev)}
+                  disabled={!localForm.paid_messaging_enabled}
+                />
+              </div>
             </div>
 
             {validationError ? <p className="text-sm text-destructive">{validationError}</p> : null}

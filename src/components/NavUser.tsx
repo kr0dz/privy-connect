@@ -69,7 +69,14 @@ const NavUser = () => {
     };
 
     void load();
+
+    const onProfileUpdated = () => {
+      void load();
+    };
+    window.addEventListener('profile:updated', onProfileUpdated);
+
     return () => {
+      window.removeEventListener('profile:updated', onProfileUpdated);
       mounted = false;
     };
   }, []);

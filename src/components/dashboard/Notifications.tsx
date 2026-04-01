@@ -45,6 +45,10 @@ const eventToMessage = (eventType: string, metadata: Json | null): string => {
     return 'Tu gemelo IA envio una respuesta automaticamente.';
   }
 
+  if (eventType === 'booking') {
+    return 'Un fan reservo una videollamada en tu calendario.';
+  }
+
   return `Evento reciente: ${eventType}`;
 };
 
@@ -93,7 +97,14 @@ const Notifications = ({ creatorId }: NotificationsProps) => {
     };
 
     void load();
+
+    const onPush = () => {
+      void load();
+    };
+    window.addEventListener('push:received', onPush);
+
     return () => {
+      window.removeEventListener('push:received', onPush);
       mounted = false;
     };
   }, [creatorId]);

@@ -4,8 +4,13 @@ import { Button } from "@/components/ui/button";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Star, Eye, Lock, MessageCircle, Crown, Heart, Image, Video, Headphones, Users, Clock, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useModals } from "@/contexts/ModalContext";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { authService, type UserRole } from "@/services/auth/authService";
+import { supabase } from "@/lib/supabase";
+import { toast } from "@/components/ui/sonner";
+import StreamService from "@/services/video/StreamService";
 
 const tiers = [
   { name: "Basic", price: "$9.99/mo", features: ["Access to public content", "Like & comment", "Basic feed"] },
@@ -28,10 +33,126 @@ const typeIcon = {
   audio: <Headphones className="w-5 h-5" />,
 };
 
+interface VideoCallSlot {
+  id: string;
+  start_time: string;
+  duration: number;
+  status: 'available' | 'booked' | 'completed' | 'cancelled';
+  stream_call_id?: string | null;
+}
+
 const CreatorProfile = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState<"content" | "about">("content");
+  const [role, setRole] = useState<UserRole | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [slots, setSlots] = useState<VideoCallSlot[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(true);
+  const [bookingId, setBookingId] = useState<string | null>(null);
   const { openUnlock, openChat } = useModals();
+
+  const loadSlots = async (creatorId: string) => {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('video_calls')
+      .select('id, start_time, duration, status, stream_call_id')
+      .eq('creator_id', creatorId)
+      .eq('status', 'available')
+      .gte('start_time', nowIso)
+      .order('start_time', { ascending: true })
+      .limit(20);
+
+    if (error) {
+      toast.error('No se pudieron cargar los horarios de videollamada.');
+      setLoadingSlots(false);
+      return;
+    }
+
+    setSlots((data || []) as VideoCallSlot[]);
+    setLoadingSlots(false);
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const init = async () => {
+      const [session, nextRole] = await Promise.all([
+        authService.getSession(),
+        authService.getRole(),
+      ]);
+
+      if (!mounted) {
+        return;
+      }
+
+      setRole(nextRole);
+      setUserId(session?.user.id ?? null);
+
+      if (id) {
+        await loadSlots(id);
+      }
+    };
+
+    void init();
+    return () => {
+      mounted = false;
+    };
+  }, [id]);
+
+  const bookSlot = async (slotId: string) => {
+    if (!id || !userId) {
+      toast.error('Debes iniciar sesion para reservar.');
+      return;
+    }
+
+    if (role !== 'fan') {
+      toast.error('Solo los fans pueden reservar videollamadas.');
+      return;
+    }
+
+    setBookingId(slotId);
+    try {
+      const { data, error } = await supabase
+        .from('video_calls')
+        .update({ fan_id: userId, status: 'booked' })
+        .eq('id', slotId)
+        .eq('status', 'available')
+        .is('fan_id', null)
+        .select('id');
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+        throw new Error('El horario ya no esta disponible.');
+      }
+
+      await supabase.from('analytics_events').insert({
+        user_id: userId,
+        creator_id: id,
+        event_type: 'booking',
+        metadata: {
+          video_call_id: slotId,
+          source: 'creator_profile',
+        },
+      });
+
+      try {
+        await StreamService.createCall(slotId);
+      } catch (roomError) {
+        console.error(roomError);
+        toast.error('Se reservo el horario, pero no se pudo crear la sala de video automaticamente.');
+      }
+
+      toast.success('Videollamada reservada correctamente.');
+      await loadSlots(id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo reservar el horario.');
+    } finally {
+      setBookingId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -206,6 +327,33 @@ const CreatorProfile = () => {
                 </div>
               </div>
             )}
+
+            <Card className="mt-8 border-primary/20 bg-surface-glass">
+              <CardHeader>
+                <CardTitle>Book a video call</CardTitle>
+                <CardDescription>Reserva un horario disponible para una sesion privada.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {loadingSlots ? <p className="text-sm text-muted-foreground">Cargando horarios...</p> : null}
+                {!loadingSlots && slots.length === 0 ? <p className="text-sm text-muted-foreground">No hay horarios disponibles por ahora.</p> : null}
+                {!loadingSlots && slots.map((slot) => (
+                  <div key={slot.id} className="rounded-lg border border-border/50 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{new Date(slot.start_time).toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">Duracion: {slot.duration} minutos</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="gold"
+                      disabled={role !== 'fan' || bookingId === slot.id}
+                      onClick={() => void bookSlot(slot.id)}
+                    >
+                      {bookingId === slot.id ? 'Reservando...' : 'Reservar'}
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
           </div>
         </div>
       </main>
