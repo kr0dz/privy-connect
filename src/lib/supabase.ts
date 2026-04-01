@@ -59,6 +59,18 @@ export type Tables = {
     display_name: string | null;
     system_prompt: string | null;
     style_overrides: Json | null;
+    tone: 'warm' | 'professional' | 'playful' | 'mysterious' | null;
+    interests: string[] | null;
+    bio: string | null;
+    greeting_message: string | null;
+    response_style: string | null;
+    emoji_usage: 'frequent' | 'moderate' | 'rare' | null;
+    topics: string[] | null;
+    price_ai: number | null;
+    price_real: number | null;
+    trigger_keywords: string[] | null;
+    draft_mode: boolean | null;
+    auto_send: boolean | null;
     draft_mode_enabled: boolean;
     auto_send_enabled: boolean;
     active: boolean;

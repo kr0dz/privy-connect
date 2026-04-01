@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
 import UnlockModal from "@/components/modals/UnlockModal";
 import WaitlistModal from "@/components/modals/WaitlistModal";
-import ChatModal from "@/components/modals/ChatModal";
+import ChatModal from "@/components/chat/ChatModal";
 
 type ModalType = "unlock" | "waitlist" | "chat" | null;
 

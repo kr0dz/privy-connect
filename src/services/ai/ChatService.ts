@@ -36,12 +36,12 @@ interface PaymentTrigger {
   reason: string;
 }
 
-interface ChatWithMemoryOptions {
+export interface ChatWithMemoryOptions {
   content: string;
   type?: Message['type'];
 }
 
-interface ChatWithMemoryResult {
+export interface ChatWithMemoryResult {
   userMessage: Message | null;
   aiMessage: Message | null;
   trigger: PaymentTrigger | null;
@@ -83,10 +83,12 @@ export class ChatService {
   private isCreatorOnline = false;
   private statusIntervalId: ReturnType<typeof setInterval> | null = null;
   private creatorTwinCache: CreatorTwinRecord | null = null;
+  private realtimeChannelName: string;
 
   constructor(config: ChatServiceConfig) {
     this.creatorId = config.creatorId;
     this.userId = config.userId;
+    this.realtimeChannelName = `chat:${this.creatorId}:${this.userId}`;
     void this.initDeepSeek(config.apiKey);
     void this.checkCreatorStatus();
   }
@@ -542,6 +544,59 @@ export class ChatService {
       console.error('Error getting conversation:', error);
       return [];
     }
+  }
+
+  subscribeToMessages(onChange: (message: Message, event: 'INSERT' | 'UPDATE') => void): () => void {
+    const channel = supabase
+      .channel(this.realtimeChannelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload) => {
+          const raw = payload.new as Record<string, unknown>;
+          if (!this.belongsToConversation(raw)) {
+            return;
+          }
+          onChange(this.mapMessageRow(raw), 'INSERT');
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload) => {
+          const raw = payload.new as Record<string, unknown>;
+          if (!this.belongsToConversation(raw)) {
+            return;
+          }
+          onChange(this.mapMessageRow(raw), 'UPDATE');
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('Chat realtime channel error');
+        }
+      });
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }
+
+  private belongsToConversation(row: Record<string, unknown>): boolean {
+    const senderId = String(row.sender_id ?? '');
+    const receiverId = String(row.receiver_id ?? '');
+
+    const isUserToCreator = senderId === this.userId && receiverId === this.creatorId;
+    const isCreatorToUser = senderId === this.creatorId && receiverId === this.userId;
+    return isUserToCreator || isCreatorToUser;
   }
 
   getCreatorOnlineStatus(): boolean {

@@ -1,5 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Message, ChatState } from '@/types/chat';
+import {
+  ChatService,
+  type ChatWithMemoryResult,
+} from '@/services/chat/ChatService';
 
 interface FanMemoryItem {
   key: string;
@@ -34,12 +38,33 @@ interface UnlockResult {
 
 const stripePublishableKey =
   (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_STRIPE_PUBLISHABLE_KEY ?? '';
+const deepSeekApiKey =
+  (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_DEEPSEEK_API_KEY ?? '';
 const supabaseUrl =
   (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_SUPABASE_URL ?? '';
 const supabaseAnonKey =
   (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_SUPABASE_ANON_KEY ?? '';
 
+function sortByTimestamp(messages: Message[]): Message[] {
+  return [...messages].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+}
+
+function upsertMessage(messages: Message[], next: Message): Message[] {
+  const idx = messages.findIndex(msg => msg.id === next.id);
+  if (idx === -1) {
+    return sortByTimestamp([...messages, next]);
+  }
+
+  const updated = [...messages];
+  updated[idx] = { ...updated[idx], ...next };
+  return sortByTimestamp(updated);
+}
+
 export const useChat = (creatorId: string | null, userId: string | null) => {
+  const chatServiceRef = useRef<ChatService | null>(null);
+  const unsubscribeRealtimeRef = useRef<(() => void) | null>(null);
+  const serviceKeyRef = useRef<string | null>(null);
+
   const [state, setState] = useState<ChatState>({
     messages: [],
     isTyping: false,
@@ -62,6 +87,37 @@ export const useChat = (creatorId: string | null, userId: string | null) => {
   }, [creatorId]);
 
   useEffect(() => {
+    const key = creatorId && userId ? `${creatorId}:${userId}` : null;
+
+    if (!key || !deepSeekApiKey) {
+      return;
+    }
+
+    if (serviceKeyRef.current === key && chatServiceRef.current) {
+      return;
+    }
+
+    unsubscribeRealtimeRef.current?.();
+    unsubscribeRealtimeRef.current = null;
+    chatServiceRef.current?.dispose();
+
+    chatServiceRef.current = new ChatService({
+      creatorId,
+      userId,
+      apiKey: deepSeekApiKey,
+    });
+    serviceKeyRef.current = key;
+
+    return () => {
+      unsubscribeRealtimeRef.current?.();
+      unsubscribeRealtimeRef.current = null;
+      chatServiceRef.current?.dispose();
+      chatServiceRef.current = null;
+      serviceKeyRef.current = null;
+    };
+  }, [creatorId, userId]);
+
+  useEffect(() => {
     setState(prev => ({
       ...prev,
       messages: [],
@@ -73,7 +129,14 @@ export const useChat = (creatorId: string | null, userId: string | null) => {
   const addMessage = useCallback((message: Message) => {
     setState(prev => ({
       ...prev,
-      messages: [...prev.messages, message],
+      messages: upsertMessage(prev.messages, message),
+    }));
+  }, []);
+
+  const replaceMessages = useCallback((messages: Message[]) => {
+    setState(prev => ({
+      ...prev,
+      messages: sortByTimestamp(messages),
     }));
   }, []);
 
@@ -99,6 +162,80 @@ export const useChat = (creatorId: string | null, userId: string | null) => {
   const clearMessages = useCallback(() => {
     setState(prev => ({ ...prev, messages: [] }));
   }, []);
+
+  const loadConversation = useCallback(async (limit = 50): Promise<Message[]> => {
+    if (!chatServiceRef.current) {
+      return [];
+    }
+
+    const conversation = await chatServiceRef.current.getConversation(limit);
+    replaceMessages(conversation);
+    return conversation;
+  }, [replaceMessages]);
+
+  const subscribeToConversation = useCallback((): (() => void) => {
+    if (!chatServiceRef.current) {
+      return () => undefined;
+    }
+
+    unsubscribeRealtimeRef.current?.();
+    const unsubscribe = chatServiceRef.current.subscribeToMessages((message) => {
+      setState(prev => ({
+        ...prev,
+        messages: upsertMessage(prev.messages, message),
+      }));
+    });
+    unsubscribeRealtimeRef.current = unsubscribe;
+    return unsubscribe;
+  }, []);
+
+  const sendMessageWithMemory = useCallback(async (
+    content: string,
+    type: Message['type'] = 'text'
+  ): Promise<ChatWithMemoryResult> => {
+    if (!chatServiceRef.current || !creatorId || !userId) {
+      return { userMessage: null, aiMessage: null, trigger: null, draftMode: false };
+    }
+
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: Message = {
+      id: tempId,
+      senderId: userId,
+      receiverId: creatorId,
+      content,
+      type,
+      isAI: false,
+      timestamp: new Date(),
+      read: false,
+    };
+
+    addMessage(optimistic);
+
+    const result = await chatServiceRef.current.sendMessageWithMemory({ content, type });
+
+    if (!result.userMessage) {
+      setState(prev => ({
+        ...prev,
+        messages: prev.messages.filter(msg => msg.id !== tempId),
+      }));
+      return result;
+    }
+
+    setState(prev => ({
+      ...prev,
+      messages: sortByTimestamp(
+        prev.messages
+          .filter(msg => msg.id !== tempId)
+          .concat(result.userMessage)
+      ),
+    }));
+
+    if (result.aiMessage) {
+      addMessage(result.aiMessage);
+    }
+
+    return result;
+  }, [addMessage, creatorId, userId]);
 
   const addFanMemory = useCallback((memory: Omit<FanMemoryItem, 'createdAt'>) => {
     setFanMemories(prev => [
@@ -247,6 +384,10 @@ export const useChat = (creatorId: string | null, userId: string | null) => {
     addMessageWithMemory,
     fanMemories,
     addFanMemory,
+    loadConversation,
+    replaceMessages,
+    subscribeToConversation,
+    sendMessageWithMemory,
     payment,
     paymentState: payment,
     startCheckout,

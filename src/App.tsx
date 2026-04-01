@@ -14,6 +14,7 @@ import Dashboard from "./pages/Dashboard.tsx";
 import FanDashboard from "./pages/FanDashboard.tsx";
 import CreatorDashboard from "./pages/CreatorDashboard.tsx";
 import AdminDashboard from "./pages/AdminDashboard.tsx";
+import CreatorSettings from "./pages/CreatorSettings.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/dashboard/fan" element={<FanDashboard />} />
             <Route path="/dashboard/creator" element={<CreatorDashboard />} />
+            <Route path="/creator/settings" element={<CreatorSettings />} />
             <Route path="/dashboard/admin" element={<AdminDashboard />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

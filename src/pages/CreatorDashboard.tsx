@@ -153,7 +153,7 @@ const CreatorDashboard = () => {
                 <Link to="/dashboard/creator">Editar perfil</Link>
               </Button>
               <Button asChild variant="outline">
-                <Link to="/dashboard/creator">Configurar personalidad AI</Link>
+                <Link to="/creator/settings">Configurar personalidad AI</Link>
               </Button>
               <Button asChild variant="outline">
                 <Link to="/dashboard/creator">Ver mensajes</Link>
