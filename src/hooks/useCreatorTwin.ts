@@ -19,6 +19,7 @@ export interface CreatorTwinForm {
   auto_send: boolean;
   paid_messaging_enabled: boolean;
   message_price_coins: number;
+  adult_content: boolean;
 }
 
 const defaultForm: CreatorTwinForm = {
@@ -36,6 +37,7 @@ const defaultForm: CreatorTwinForm = {
   auto_send: true,
   paid_messaging_enabled: false,
   message_price_coins: 5,
+  adult_content: false,
 };
 
 function safeStringArray(input: unknown): string[] {
@@ -97,6 +99,7 @@ export const useCreatorTwin = () => {
         auto_send: typeof data.auto_send === 'boolean' ? data.auto_send : true,
         paid_messaging_enabled: Boolean(data.paid_messaging_enabled),
         message_price_coins: typeof data.message_price_coins === 'number' ? data.message_price_coins : 5,
+        adult_content: Boolean(data.adult_content),
       });
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : 'No se pudo cargar la configuracion del gemelo.';
@@ -137,6 +140,7 @@ export const useCreatorTwin = () => {
         auto_send: next.auto_send,
         paid_messaging_enabled: next.paid_messaging_enabled,
         message_price_coins: next.message_price_coins,
+        adult_content: next.adult_content,
         draft_mode_enabled: next.draft_mode,
         auto_send_enabled: next.auto_send,
         active: true,

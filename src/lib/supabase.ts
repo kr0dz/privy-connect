@@ -26,6 +26,9 @@ export type Tables = {
     subscription_tier: 'free' | 'premium' | 'vip';
     wallet_balance: number;
     onboarding_completed: boolean;
+    birthdate: string | null;
+    loyalty_bonus_claimed: boolean;
+    birthday_bonus_claimed_year: number | null;
     created_at: string;
   };
   creator_content: {
@@ -36,7 +39,25 @@ export type Tables = {
     title: string;
     description: string | null;
     price: number;
+    price_coins: number | null;
+    adult_only: boolean;
     scheduled_for: string | null;
+    created_at: string;
+  };
+  content_unlocks: {
+    id: string;
+    fan_id: string;
+    content_id: string;
+    coins_spent: number;
+    created_at: string;
+  };
+  promo_codes: {
+    id: string;
+    code: string;
+    bonus_coins: number;
+    max_uses: number | null;
+    used_count: number;
+    expires_at: string | null;
     created_at: string;
   };
   video_calls: {
@@ -100,6 +121,7 @@ export type Tables = {
     auto_send: boolean | null;
     paid_messaging_enabled: boolean | null;
     message_price_coins: number | null;
+    adult_content: boolean;
     draft_mode_enabled: boolean;
     auto_send_enabled: boolean;
     active: boolean;

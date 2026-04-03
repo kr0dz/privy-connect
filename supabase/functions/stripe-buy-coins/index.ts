@@ -5,9 +5,20 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Supported coin packs with fixed pricing
+const COIN_PACKS: Record<number, number> = {
+  100: 5,
+  250: 12,
+  500: 22,
+};
+
+// Fallback: dynamic rate for arbitrary amounts
+const COINS_PER_DOLLAR = 20;
+
 interface BuyCoinsPayload {
   userId: string;
   coins: number;
+  price_usd?: number;
 }
 
 Deno.serve(async (req: Request) => {
@@ -35,8 +46,15 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const coinsPerDollar = 20;
-    const amountUsd = Math.max(1, Math.ceil(coins / coinsPerDollar));
+    // Determine USD amount: use fixed pack if available, otherwise dynamic
+    let amountUsd: number;
+    if (body.price_usd && Number.isFinite(body.price_usd) && body.price_usd > 0) {
+      amountUsd = body.price_usd;
+    } else if (COIN_PACKS[coins] !== undefined) {
+      amountUsd = COIN_PACKS[coins];
+    } else {
+      amountUsd = Math.max(1, Math.ceil(coins / COINS_PER_DOLLAR));
+    }
 
     const stripe = new Stripe(stripeSecretKey, {
       apiVersion: "2024-06-20",

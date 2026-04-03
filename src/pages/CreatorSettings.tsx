@@ -266,6 +266,20 @@ const CreatorSettings = () => {
               </div>
             </div>
 
+            <div className="border border-amber-400/30 rounded-xl p-4 bg-amber-400/5">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={localForm.adult_content}
+                  onChange={(e) => setLocalForm(prev => prev ? { ...prev, adult_content: e.target.checked } : prev)}
+                />
+                <span className="font-medium text-amber-400">Perfil de contenido adulto (+18)</span>
+              </label>
+              <p className="text-xs text-muted-foreground mt-1 ml-6">
+                Los fans deberan confirmar que son mayores de 18 anos antes de ver tu contenido o chatear contigo.
+              </p>
+            </div>
+
             {validationError ? <p className="text-sm text-destructive">{validationError}</p> : null}
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             {success ? <p className="text-sm text-green-500">{success}</p> : null}

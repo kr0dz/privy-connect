@@ -54,13 +54,18 @@ export const useWallet = () => {
     void refreshBalance();
   }, [refreshBalance]);
 
-  const buyCoins = useCallback(async (coins: number): Promise<BuyCoinsResult> => {
+  const buyCoins = useCallback(async (coins: number, priceUsd?: number): Promise<BuyCoinsResult> => {
     if (!userId) {
       return { ok: false, error: 'Debes iniciar sesion para comprar monedas.' };
     }
 
+    const body: Record<string, unknown> = { userId, coins };
+    if (priceUsd !== undefined) {
+      body.price_usd = priceUsd;
+    }
+
     const { data, error } = await supabase.functions.invoke<{ url?: string }>('stripe-buy-coins', {
-      body: { userId, coins },
+      body,
     });
 
     if (error) {

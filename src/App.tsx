@@ -21,6 +21,7 @@ import CreatorDashboard from "./pages/CreatorDashboard.tsx";
 import AdminDashboard from "./pages/AdminDashboard.tsx";
 import CreatorSettings from "./pages/CreatorSettings.tsx";
 import ProfileSettings from "./pages/ProfileSettings.tsx";
+import TransactionHistory from "./pages/TransactionHistory.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import { authService, type UserRole } from "@/services/auth/authService";
 import { supabase } from "@/lib/supabase";
@@ -152,6 +153,7 @@ const App = () => {
               <Route path="/dashboard/creator" element={<ProtectedRoute><CreatorDashboard /></ProtectedRoute>} />
               <Route path="/creator/settings" element={<ProtectedRoute requiredRole="creator"><CreatorSettings /></ProtectedRoute>} />
               <Route path="/profile-settings" element={<ProtectedRoute><ProfileSettings /></ProtectedRoute>} />
+              <Route path="/transactions" element={<ProtectedRoute><TransactionHistory /></ProtectedRoute>} />
               <Route path="/dashboard/admin" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>

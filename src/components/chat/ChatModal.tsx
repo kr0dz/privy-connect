@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, Lock, Sparkles } from "lucide-react";
+import { X, Send, Lock, Sparkles, Gem } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useRef } from "react";
 import { useModals } from "@/contexts/ModalContext";
@@ -8,6 +8,8 @@ import useWallet from "@/hooks/useWallet";
 import { authService } from "@/services/auth/authService";
 import { Message } from "@/types/chat";
 import { toast } from "sonner";
+import TipModal from "@/components/chat/TipModal";
+import BuyCoinsModal from "@/components/modals/BuyCoinsModal";
 
 interface ChatModalProps {
 	open: boolean;
@@ -21,6 +23,8 @@ const ChatModal = ({ open, onClose, creatorId, creatorName, creatorInitial }: Ch
 	const [input, setInput] = useState("");
 	const [isTyping, setIsTyping] = useState(false);
 	const [userId, setUserId] = useState<string | null>(null);
+	const [tipOpen, setTipOpen] = useState(false);
+	const [buyCoinsOpen, setBuyCoinsOpen] = useState(false);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const { openUnlock, trackClick } = useModals();
 	 const { balance, buyCoins, deductCoins, refreshBalance } = useWallet();
@@ -144,16 +148,6 @@ const ChatModal = ({ open, onClose, creatorId, creatorName, creatorInitial }: Ch
 		}
 	};
 
-	const handleBuyCoins = async () => {
-		const result = await buyCoins(100);
-		if (!result.ok || !result.checkoutUrl) {
-			toast.error(result.error || "No se pudo iniciar la compra de monedas.");
-			return;
-		}
-
-		window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
-	};
-
 	const handleUnlock = async (message: Message) => {
 		if (!message.locked) {
 			return;
@@ -225,7 +219,7 @@ const ChatModal = ({ open, onClose, creatorId, creatorName, creatorInitial }: Ch
 								<div className="text-xs px-2 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary">
 									Coins: {Math.floor(balance)}
 								</div>
-								<Button size="sm" variant="gold-outline" onClick={() => void handleBuyCoins()}>
+							<Button size="sm" variant="gold-outline" onClick={() => setBuyCoinsOpen(true)}>
 									Buy Coins
 								</Button>
 								<button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -315,6 +309,16 @@ const ChatModal = ({ open, onClose, creatorId, creatorName, creatorInitial }: Ch
 								<p className="text-xs text-amber-400 mb-2">Saldo bajo de monedas. Compra mas para seguir chateando.</p>
 							) : null}
 							<div className="flex gap-2">
+								<Button
+									variant="ghost"
+									size="icon"
+									className="shrink-0 rounded-xl text-primary hover:bg-primary/10"
+									title="Enviar propina"
+									disabled={!creatorId || !userId}
+									onClick={() => setTipOpen(true)}
+								>
+									<Gem className="w-4 h-4" />
+								</Button>
 								<input
 									type="text"
 									value={input}
@@ -333,6 +337,16 @@ const ChatModal = ({ open, onClose, creatorId, creatorName, creatorInitial }: Ch
 				</motion.div>
 			)}
 		</AnimatePresence>
+		{creatorId && userId ? (
+			<TipModal
+				open={tipOpen}
+				onClose={() => setTipOpen(false)}
+				creatorId={creatorId}
+				creatorName={creatorName}
+				fanId={userId}
+			/>
+		) : null}
+		<BuyCoinsModal open={buyCoinsOpen} onClose={() => setBuyCoinsOpen(false)} />
 	);
 };
 

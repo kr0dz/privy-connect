@@ -1,9 +1,9 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Star, Eye, Lock, MessageCircle, Crown, Heart, Image, Video, Headphones, Users, Clock, Sparkles } from "lucide-react";
+import { Star, Eye, Lock, MessageCircle, Crown, Heart, Image, Video, Headphones, Users, Clock, Sparkles, ShieldAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useModals } from "@/contexts/ModalContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,20 +11,16 @@ import { authService, type UserRole } from "@/services/auth/authService";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/sonner";
 import StreamService from "@/services/video/StreamService";
+import AgeVerificationModal from "@/components/modals/AgeVerificationModal";
+import ContentCard from "@/components/feed/ContentCard";
+import ContentService, { type ContentItem } from "@/services/content/ContentService";
+
+const AGE_VERIFIED_KEY = 'privy_age_verified';
 
 const tiers = [
   { name: "Basic", price: "$9.99/mo", features: ["Access to public content", "Like & comment", "Basic feed"] },
   { name: "Premium", price: "$24.99/mo", features: ["All Basic perks", "Exclusive content", "Direct messaging", "Polls & decisions"], popular: true },
   { name: "VIP", price: "$49.99/mo", features: ["All Premium perks", "Priority replies", "Custom content requests", "Private rooms", "AI chat access"] },
-];
-
-const mockContent = [
-  { id: 1, type: "image", locked: false, label: "Behind the scenes", unlocks: 34 },
-  { id: 2, type: "video", locked: true, label: "Exclusive session", price: "$5", unlocks: 12, limited: true },
-  { id: 3, type: "image", locked: false, label: "Morning vibes", unlocks: 67 },
-  { id: 4, type: "audio", locked: true, label: "Personal voice note", price: "$3", unlocks: 8 },
-  { id: 5, type: "image", locked: true, label: "Premium drop", price: "$7", unlocks: 5, limited: true },
-  { id: 6, type: "video", locked: false, label: "Q&A Highlights", unlocks: 45 },
 ];
 
 const typeIcon = {
@@ -43,12 +39,24 @@ interface VideoCallSlot {
 
 const CreatorProfile = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"content" | "about">("content");
   const [role, setRole] = useState<UserRole | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [slots, setSlots] = useState<VideoCallSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(true);
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const [adultContent, setAdultContent] = useState(false);
+  const [ageVerified, setAgeVerified] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem(AGE_VERIFIED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [showAgeModal, setShowAgeModal] = useState(false);
+  const [contentItems, setContentItems] = useState<ContentItem[]>([]);
+  const [loadingContent, setLoadingContent] = useState(true);
   const { openUnlock, openChat } = useModals();
 
   const loadSlots = async (creatorId: string) => {
@@ -72,6 +80,13 @@ const CreatorProfile = () => {
     setLoadingSlots(false);
   };
 
+  const loadCreatorContent = async (creatorId: string, fanId?: string) => {
+    setLoadingContent(true);
+    const items = await ContentService.getCreatorContent(creatorId, fanId);
+    setContentItems(items);
+    setLoadingContent(false);
+  };
+
   useEffect(() => {
     let mounted = true;
 
@@ -86,10 +101,36 @@ const CreatorProfile = () => {
       }
 
       setRole(nextRole);
-      setUserId(session?.user.id ?? null);
+      const fanId = session?.user.id ?? undefined;
+      setUserId(fanId ?? null);
 
       if (id) {
-        await loadSlots(id);
+        // Load creator twin for adult_content flag
+        const { data: twin } = await supabase
+          .from('creator_twins')
+          .select('adult_content')
+          .eq('creator_id', id)
+          .maybeSingle();
+
+        if (!mounted) return;
+
+        const isAdult = Boolean(twin?.adult_content);
+        setAdultContent(isAdult);
+
+        // If adult and not yet verified, show modal
+        if (isAdult) {
+          const verified = (() => {
+            try { return sessionStorage.getItem(AGE_VERIFIED_KEY) === '1'; } catch { return false; }
+          })();
+          if (!verified) {
+            setShowAgeModal(true);
+          }
+        }
+
+        await Promise.all([
+          loadSlots(id),
+          loadCreatorContent(id, fanId),
+        ]);
       }
     };
 
@@ -98,6 +139,23 @@ const CreatorProfile = () => {
       mounted = false;
     };
   }, [id]);
+
+  const handleAgeConfirm = () => {
+    try { sessionStorage.setItem(AGE_VERIFIED_KEY, '1'); } catch { /* ignore */ }
+    setAgeVerified(true);
+    setShowAgeModal(false);
+  };
+
+  const handleAgeDeny = () => {
+    setShowAgeModal(false);
+    navigate('/discover');
+  };
+
+  const handleContentUnlocked = (contentId: string) => {
+    setContentItems((prev) =>
+      prev.map((c) => (c.id === contentId ? { ...c, unlocked: true } : c)),
+    );
+  };
 
   const bookSlot = async (slotId: string) => {
     if (!id || !userId) {
@@ -157,6 +215,11 @@ const CreatorProfile = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      <AgeVerificationModal
+        open={showAgeModal}
+        onConfirm={handleAgeConfirm}
+        onDeny={handleAgeDeny}
+      />
       <main className="pt-16">
         {/* Cover */}
         <div className="h-48 md:h-64" style={{ background: "linear-gradient(135deg, hsl(280 60% 20%), hsl(320 50% 15%))" }} />
@@ -177,6 +240,11 @@ const CreatorProfile = () => {
                 <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
                   <Crown className="w-3 h-3" /> Top Creator
                 </div>
+                {adultContent && (
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400/10 text-amber-400 text-xs font-medium">
+                    <ShieldAlert className="w-3 h-3" /> +18
+                  </div>
+                )}
               </div>
               <p className="text-muted-foreground mb-3">Lifestyle · Art · Exclusive experiences</p>
               <div className="flex items-center gap-6 text-sm text-muted-foreground">
@@ -190,7 +258,13 @@ const CreatorProfile = () => {
                 <Button
                   variant="gold"
                   className="gap-2 glow-gold"
-                  onClick={() => openChat({ creatorId: id, creatorName: "Luna Noir", creatorInitial: "L" })}
+                  onClick={() => {
+                    if (adultContent && !ageVerified) {
+                      setShowAgeModal(true);
+                      return;
+                    }
+                    openChat({ creatorId: id, creatorName: "Luna Noir", creatorInitial: "L" });
+                  }}
                 >
                   <MessageCircle className="w-4 h-4" /> Start Private Chat
                 </Button>
@@ -221,48 +295,31 @@ const CreatorProfile = () => {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Content grid */}
                 <div className="lg:col-span-2">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    {mockContent.map((item, i) => (
-                      <motion.div
-                        key={item.id}
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: i * 0.05 }}
-                        whileHover={{ scale: 1.02 }}
-                        onClick={() => {
-                          if (item.locked) {
-                            openUnlock({
-                              title: item.label,
-                              price: item.price || "$5",
-                              description: item.limited ? "Only 10 users can unlock this" : undefined,
-                            });
-                          }
-                        }}
-                        className="aspect-square rounded-xl bg-gradient-card border border-border/50 relative overflow-hidden group cursor-pointer hover:border-primary/20 transition-all"
-                      >
-                        <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                          {typeIcon[item.type as keyof typeof typeIcon]}
-                        </div>
-                        {item.locked && (
-                          <div className="absolute inset-0 bg-background/60 backdrop-blur-lg flex flex-col items-center justify-center gap-1.5">
-                            <Lock className="w-6 h-6 text-primary" />
-                            <span className="text-xs text-primary font-semibold">{item.price}</span>
-                            {item.limited && (
-                              <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                <Clock className="w-3 h-3" /> Limited time
-                              </span>
-                            )}
-                            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                              <Users className="w-3 h-3" /> {item.unlocks} unlocked
-                            </span>
-                          </div>
-                        )}
-                        <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-background/80 to-transparent">
-                          <span className="text-xs text-foreground">{item.label}</span>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
+                  {adultContent && !ageVerified ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+                      <ShieldAlert className="w-12 h-12 text-amber-400" />
+                      <p className="text-muted-foreground">Debes verificar tu edad para ver este contenido.</p>
+                      <Button variant="gold" onClick={() => setShowAgeModal(true)}>Verificar edad</Button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      {loadingContent ? (
+                        <p className="col-span-3 text-sm text-muted-foreground">Cargando contenido...</p>
+                      ) : contentItems.length === 0 ? (
+                        <p className="col-span-3 text-sm text-muted-foreground">Este creador aun no tiene contenido publicado.</p>
+                      ) : (
+                        contentItems.map((item, i) => (
+                          <ContentCard
+                            key={item.id}
+                            item={item}
+                            index={i}
+                            ageVerified={ageVerified}
+                            onUnlocked={handleContentUnlocked}
+                          />
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Subscription tiers */}

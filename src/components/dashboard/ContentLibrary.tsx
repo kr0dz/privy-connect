@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Upload, CalendarDays, DollarSign, Edit3 } from 'lucide-react';
+import { Upload, CalendarDays, DollarSign, Edit3, Coins, ShieldAlert } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +16,8 @@ interface ContentItem {
   type: ContentType;
   url: string;
   price: number;
+  price_coins: number | null;
+  adult_only: boolean;
   scheduled_for: string | null;
   created_at: string;
 }
@@ -34,11 +36,13 @@ const ContentLibrary = ({ creatorId }: ContentLibraryProps) => {
   const [type, setType] = useState<ContentType>('image');
   const [scheduledFor, setScheduledFor] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [priceCoins, setPriceCoins] = useState<number | ''>('');
+  const [adultOnly, setAdultOnly] = useState(false);
 
   const loadContent = async () => {
     const { data, error } = await supabase
       .from('creator_content')
-      .select('id, title, description, type, url, price, scheduled_for, created_at')
+      .select('id, title, description, type, url, price, price_coins, adult_only, scheduled_for, created_at')
       .eq('creator_id', creatorId)
       .order('created_at', { ascending: false })
       .limit(50);
@@ -88,6 +92,8 @@ const ContentLibrary = ({ creatorId }: ContentLibraryProps) => {
           type,
           url: publicData.publicUrl,
           price,
+          price_coins: priceCoins !== '' ? Number(priceCoins) : null,
+          adult_only: adultOnly,
           scheduled_for: scheduledFor ? new Date(scheduledFor).toISOString() : null,
         });
 
@@ -99,6 +105,8 @@ const ContentLibrary = ({ creatorId }: ContentLibraryProps) => {
       setTitle('');
       setDescription('');
       setPrice(9.99);
+      setPriceCoins('');
+      setAdultOnly(false);
       setScheduledFor('');
       setFile(null);
       await loadContent();
@@ -152,6 +160,35 @@ const ContentLibrary = ({ creatorId }: ContentLibraryProps) => {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="content-price-coins" className="flex items-center gap-1">
+                <Coins className="w-3.5 h-3.5 text-primary" /> Precio en monedas (opcional)
+              </Label>
+              <Input
+                id="content-price-coins"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="Ej: 20 coins"
+                value={priceCoins}
+                onChange={(e) => setPriceCoins(e.target.value === '' ? '' : Number(e.target.value))}
+              />
+              <p className="text-xs text-muted-foreground">Si lo defines, fans deben gastar estas monedas para ver el contenido.</p>
+            </div>
+
+            <div className="space-y-2 flex items-center gap-2 md:col-span-2">
+              <input
+                id="content-adult"
+                type="checkbox"
+                checked={adultOnly}
+                onChange={(e) => setAdultOnly(e.target.checked)}
+                className="w-4 h-4 accent-primary"
+              />
+              <Label htmlFor="content-adult" className="flex items-center gap-1 cursor-pointer">
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-400" /> Contenido solo para adultos (+18)
+              </Label>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="content-schedule">Programar para</Label>
               <Input id="content-schedule" type="datetime-local" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
             </div>
@@ -187,6 +224,12 @@ const ContentLibrary = ({ creatorId }: ContentLibraryProps) => {
               {item.description ? <p className="text-sm text-muted-foreground">{item.description}</p> : null}
               <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1"><DollarSign className="w-3 h-3" /> {Number(item.price).toFixed(2)}</span>
+                {item.price_coins ? (
+                  <span className="inline-flex items-center gap-1 text-primary"><Coins className="w-3 h-3" /> {item.price_coins} coins</span>
+                ) : null}
+                {item.adult_only ? (
+                  <span className="inline-flex items-center gap-1 text-amber-400"><ShieldAlert className="w-3 h-3" /> +18</span>
+                ) : null}
                 <span className="inline-flex items-center gap-1"><CalendarDays className="w-3 h-3" /> {item.scheduled_for ? new Date(item.scheduled_for).toLocaleString() : 'Sin programar'}</span>
               </div>
               <div className="flex items-center gap-2">
